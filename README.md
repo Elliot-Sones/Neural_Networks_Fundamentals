@@ -2,12 +2,13 @@
 
 From scratch to production-ready—all in NumPy. Here’s the path, step by step.
 
-## 1. Raw Baseline
+
+## 1st iteration: Simple Multi Layer Perceptron
 - Architecture: 784 → 10 (single linear layer) with softmax, trained via full-batch gradient descent.
 - Result: **92.6% dev accuracy**, **91–92% test accuracy**.
 - Takeaway: even a naive implementation works, but capacity and optimization limit headroom.
 
-## 2. Capacity & Optimization Leap
+## 2nd Iteration: Architechture and Training improvements 
 - Architecture upgrade: 784 → 256 → 128 → 10 with ReLU activations.
 - Training changes: mini-batch Adam (batch 128), He initialization, L2 regularization (5e-4), 15 epochs.
 - Metrics: **99.8% train accuracy**, **97.1% dev accuracy**, **97.2% test accuracy**.
