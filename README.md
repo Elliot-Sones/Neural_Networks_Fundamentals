@@ -1,6 +1,8 @@
-# Sketchpad Digit Inspector
+# Simple Neural Network to production-ready digit classifier
 
-From scratch to production-ready—all in NumPy. Here’s the path, step by step.
+Neural networks form the foundation of modern machine learning, so I wanted to go beyond using libraries and truly understand how they work. To do that, I built a neural network completely from scratch using only NumPy—no frameworks, no shortcuts. This project gave me a hands-on understanding of core concepts like forward propagation, backpropagation, and gradient descent, and helped me see exactly how data flows and learns within a model.
+
+From scratch to production-ready—all in NumPy. Here’s the path, step by step, from me explaining the math and the steps I took to the final demo. 
 
 ## Production Demo: 
 <p align="center">
