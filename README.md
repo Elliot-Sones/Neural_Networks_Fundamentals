@@ -2,6 +2,8 @@
 
 From scratch to production-ready—all in NumPy. Here’s the path, step by step.
 
+##Production Demo: <video src="assets/demo.mp4" controls autoplay loop muted width="600"></video>
+
 
 ## 1st iteration: Simple Multi Layer Perceptron
 - Architecture: 784 → 10 (single linear layer) with softmax, trained via full-batch gradient descent.
