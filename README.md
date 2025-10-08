@@ -4,6 +4,9 @@ Neural networks form the foundation of modern machine learning, so I wanted to g
 
 From scratch to production-ready—all in NumPy. Here’s the path, step by step, from me explaining the math and the steps I took to the final demo. 
 
+
+## Neural Network full walkthrough from Scratch: 
+
 ## Production Demo: 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=RzZ32FRI4nI">
@@ -11,7 +14,6 @@ From scratch to production-ready—all in NumPy. Here’s the path, step by step
   </a>
 </p>
 
-## Neural Network full walkthrough from Scratch: 
 
 
 ## 1st iteration: Simple Multi Layer Perceptron
