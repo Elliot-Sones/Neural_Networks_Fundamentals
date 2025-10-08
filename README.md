@@ -3,7 +3,7 @@
 From scratch to production-ready—all in NumPy. Here’s the path, step by step.
 
 ## Production Demo: 
-[![Watch the video](https://img.youtube.com/watch?v=RzZ32FRI4nI.jpg)](https://www.youtube.com/watch?v=RzZ32FRI4nI)
+[![Watch the video](https://img.youtube.com/vi/RzZ32FRI4nI/maxresdefault.jpg)](https://www.youtube.com/watch?v=RzZ32FRI4nI)
 
 ## Neural Network full walkthrough from Scratch: 
 
