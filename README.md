@@ -1,19 +1,28 @@
 # Sketchpad Digit Inspector
 
-From a bare-bones NumPy neural net to a production-ready digit recognizer—here’s the journey in hard numbers.
+From scratch to production-ready—all in NumPy. Here’s the path, step by step.
 
-- **Baseline (Week 1):** 2-layer network (784→10) trained with full-batch gradient descent plateaued at **92.6% dev accuracy**. No frameworks, just vectorized NumPy.
-- **Breakthrough:** Upgraded to a 784→256→128→10 architecture, mini-batch Adam (batch 128), He init, and L2 regularization. Training accuracy jumped to **99.8%**, while dev hit **97.1%** and test hit **97.2%** after 15 epochs.
-- **Tooling:** Training script now standardizes inputs, persists weights + normalization stats (`archive/trained_model.npz`), and logs per-epoch metrics for reproducibility.
-- **Testing:** `python test_model.py` produces end-to-end evaluation with per-digit accuracy, confirming MNIST-class performance.
-- **Production UX:** Gradio-powered app visualizes the exact 28×28 tensor the model consumes, surfaces stroke heuristics (center offset, density, area), and flags out-of-distribution sketches—keeping users honest.
+## 1. Raw Baseline
+- Architecture: 784 → 10 (single linear layer) with softmax, trained via full-batch gradient descent.
+- Result: **92.6% dev accuracy**, **91–92% test accuracy**.
+- Takeaway: even a naive implementation works, but capacity and optimization limit headroom.
 
-Convenient commands:
+## 2. Capacity & Optimization Leap
+- Architecture upgrade: 784 → 256 → 128 → 10 with ReLU activations.
+- Training changes: mini-batch Adam (batch 128), He initialization, L2 regularization (5e-4), 15 epochs.
+- Metrics: **99.8% train accuracy**, **97.1% dev accuracy**, **97.2% test accuracy**.
+- Insight: depth + adaptive optimization + regularization bridge the gap to state-of-the-art MNIST results.
 
+## 3. Putting into Production 
+- Interactive app (`python app.py`): Putting into production. Accuracy was very low from the start. 
+- Added diagnostic : shows exact 28x28 tensor fed into the NN, stroke density (sum of pixel value), center offset and area ration. Found that the production input was too different to the training data. 
+- Passed heavy stress testing as shown in video
+
+## 4. Quick Start
 ```bash
-python training.py     # retrain and save updated weights
-python test_model.py   # validate on the MNIST test set
-python app.py          # launch interactive sketchpad with diagnostics
+python training.py     # retrain and persist weights/norm stats
+python test_model.py   # validate on the 10k MNIST test set
+python app.py          # launch the sketchpad digit inspector
 ```
 
-All weights, data, and tooling live in this repo—no external ML frameworks required.
+Everything—from data ingestion to UI—runs in this repo with pure NumPy. No high-level ML frameworks, yet the model still delivers **97%+** accuracy and production-grade UX.
