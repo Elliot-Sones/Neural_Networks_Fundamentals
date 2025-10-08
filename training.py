@@ -6,7 +6,7 @@ np.random.seed(42)
 
 
 INPUT_DIM = 784
-HIDDEN_DIMS = [256, 128]
+HIDDEN_DIMS = [256, 128, ]
 OUTPUT_DIM = 10
 EPOCHS = 15
 BATCH_SIZE = 128
@@ -43,7 +43,7 @@ def normalize_features(X_train, X_dev):
     X_train = (X_train - mean) / std
     X_dev = (X_dev - mean) / std
 
-    return X_train, X_dev
+    return X_train, X_dev, mean, std
 
 
 def init_params():
@@ -222,9 +222,41 @@ def evaluate(params, X, Y):
     return predictions, accuracy
 
 
+def save_model(params, mean, std, filepath="archive/trained_model.npz"):
+    """
+    Save trained model parameters to disk
+    
+    Args:
+        params: Dictionary of model parameters (W1, b1, W2, b2, W3, b3)
+        filepath: Path to save the model file
+    """
+    print(f"\nSaving trained model to '{filepath}'...")
+    np.savez(filepath, **params, mean=mean, std=std)
+    print(f"Model saved successfully!")
+
+
+def load_model(filepath="archive/trained_model.npz"):
+    """
+    Load trained model parameters from disk
+    
+    Args:
+        filepath: Path to the saved model file
+    
+    Returns:
+        params: Dictionary of model parameters
+    """
+    print(f"Loading model from '{filepath}'...")
+    loaded = np.load(filepath)
+    params = {key: loaded[key] for key in loaded.files if key not in {"mean", "std"}}
+    mean = loaded["mean"]
+    std = loaded["std"]
+    print(f"Model loaded successfully!")
+    return params, mean, std
+
+
 def main():
     X_train, Y_train, X_dev, Y_dev = load_data("archive/mnist_train.csv")
-    X_train, X_dev = normalize_features(X_train, X_dev)
+    X_train, X_dev, mean, std = normalize_features(X_train, X_dev)
 
     print(f"Training samples: {X_train.shape[1]}, features: {X_train.shape[0]}")
 
@@ -232,6 +264,9 @@ def main():
 
     dev_predictions, dev_accuracy = evaluate(params, X_dev, Y_dev)
     print(f"\nFinal Dev Accuracy: {dev_accuracy:.4f}")
+    
+    # Save the trained model
+    save_model(params, mean, std, "archive/trained_model.npz")
 
 
 if __name__ == "__main__":
