@@ -2,7 +2,8 @@
 
 From scratch to production-ready—all in NumPy. Here’s the path, step by step.
 
-##Production Demo: <video src="assets/demo.mp4" controls autoplay loop muted width="600"></video>
+##Production Demo: 
+[🎥 Watch Demo](assets/demo.mp4)
 
 
 ## 1st iteration: Simple Multi Layer Perceptron
