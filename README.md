@@ -2,7 +2,7 @@
 
 From scratch to production-ready—all in NumPy. Here’s the path, step by step.
 
-##Production Demo: 
+## Production Demo: 
 [🎥 Watch Demo](assets/demo.mp4)
 
 
