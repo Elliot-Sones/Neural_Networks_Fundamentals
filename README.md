@@ -21,7 +21,12 @@ From scratch to production-ready—all in NumPy. Here’s the path, step by step
 - Result: **92.6% dev accuracy**, **91–92% test accuracy**.
 - Takeaway: even a naive implementation works, but capacity and optimization limit headroom.
 
-## 2nd Iteration: Architechture and Training improvements 
+## Results after 1st iteration: 
+- 92% on both train and dev set with loss stuck on 0.28. The capacity was too low. 
+- Common errors on similar shapes (4vs9, 3vs5 and 7vs1) and a low confidence score demonstrated the classifier wasn't being precise enough with patterns and couldn't combine patterns for a more accurate prediction.
+- Loss curve wobbled even late in training, demonstrating late loss curve uncertainty
+
+## 2nd Iteration: Architecture and Training Improvements 
 - Architecture upgrade: 784 → 256 → 128 → 10 with ReLU activations.
 - Training changes: mini-batch Adam (batch 128), He initialization, L2 regularization (5e-4), 15 epochs.
 - Metrics: **99.8% train accuracy**, **97.1% dev accuracy**, **97.2% test accuracy**.
@@ -29,8 +34,8 @@ From scratch to production-ready—all in NumPy. Here’s the path, step by step
 
 ## 3. Putting into Production 
 - Interactive app (`python app.py`): Putting into production. Accuracy was very low from the start. 
-- Added diagnostic : shows exact 28x28 tensor fed into the NN, stroke density (sum of pixel value), center offset and area ration. Found that the production input was too different to the training data. 
-- Passed heavy stress testing as shown in video
+- Added diagnostic: shows exact 28x28 tensor fed into the NN, stroke density (sum of pixel value), center offset and area ratio. Found that the production input was too different from the training data. 
+- Passed heavy stress testing as shown in the video
 
 ## 4. Quick Start
 ```bash
