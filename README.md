@@ -8,6 +8,7 @@ From scratch to production-ready—all in NumPy. Here’s the path, step by step
     <img src="https://img.youtube.com/vi/RzZ32FRI4nI/hqdefault.jpg" width="400" />
   </a>
 </p>
+
 ## Neural Network full walkthrough from Scratch: 
 
 
