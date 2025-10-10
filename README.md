@@ -45,3 +45,9 @@ python app.py          # launch the sketchpad digit inspector
 ```
 
 Everything—from data ingestion to UI—runs in this repo with pure NumPy. No high-level ML frameworks, yet the model still delivers **97%+** accuracy and production-grade UX.
+
+## 5. Publish a Live Demo (Hugging Face Spaces)
+- Create a new Space at https://huggingface.co/new-space, set the SDK to `Gradio`, and make it public so the link can live in this README.
+- Upload `app.py`, `training.py`, `test_model.py`, `requirements.txt`, the `archive/trained_model.npz` weights file, and any assets you want to surface. Keep the `archive/` folder structure so the loader path stays valid.
+- The Space automatically installs dependencies from `requirements.txt` and runs `app.py`, exposing the Gradio UI at `https://huggingface.co/spaces/<your-username>/<space-name>`.
+- Whenever you update the demo, push the changes to the Space (drag-and-drop in the UI or use Git) and the deployment rebuilds with the latest code/model.
