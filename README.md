@@ -1,4 +1,4 @@
-# Simple Neural Network to production-ready digit classifier from scratch, no libraries except numpy
+# Simple Neural Network to production-ready digit classifier from scratch, no libraries except NumPy
 
 Neural networks form the foundation of modern machine learning, so I wanted to go beyond using libraries and truly understand how they work. To do that, I built a neural network completely from scratch using only NumPy—no frameworks, no shortcuts. This project gave me a hands-on understanding of core concepts like forward propagation, backpropagation, and gradient descent, and helped me see exactly how data flows and learns within a model.
 
