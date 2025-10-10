@@ -9,10 +9,11 @@ From scratch to production-ready—all in NumPy. Here’s the path, step by step
 ## Neural Network full walkthrough from Scratch: 
 
 ## Demo: 
-Try it for yourself: https://huggingface.co/spaces/Eli181927/elliot_digit_classifier
+**Try it for yourself:** 
+https://huggingface.co/spaces/Eli181927/elliot_digit_classifier
 
 
-Or watch demo video:
+**Or watch demo video:**
 <p align="center">
   <a href="https://www.youtube.com/watch?v=RzZ32FRI4nI">
     <img src="https://img.youtube.com/vi/RzZ32FRI4nI/hqdefault.jpg" width="400" />
