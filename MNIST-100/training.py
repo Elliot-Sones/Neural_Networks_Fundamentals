@@ -1,39 +1,77 @@
-import numpy as np
-import pandas as pd
+"""
+Training script for the MNIST-100 dataset (digits 00-99).
 
+This adapts the original MNIST training pipeline to work with the new dataset
+packaged as an .npz file containing (28 x 56) grayscale images. Each image
+contains two digits side-by-side and is labeled with an integer in [0, 99].
+"""
+
+from __future__ import annotations
+
+import numpy as np
+from pathlib import Path
+
+
+BASE_DIR = Path(__file__).resolve().parent
+ARCHIVE_DIR = BASE_DIR / "archive"
+DATASET_PATH = ARCHIVE_DIR / "mnist_compressed.npz"
 
 np.random.seed(42)
 
 
-INPUT_DIM = 784
-HIDDEN_DIMS = [256, 128, ]
-OUTPUT_DIM = 10
-EPOCHS = 15
-BATCH_SIZE = 128
+# Network configuration
+INPUT_DIM = 28 * 56  # flattened 28x56 image
+HIDDEN_DIMS = [512, 256]
+OUTPUT_DIM = 100
+EPOCHS = 20
+BATCH_SIZE = 256
 LEARNING_RATE = 1e-3
 REG_LAMBDA = 5e-4
 BETA1 = 0.9
 BETA2 = 0.999
 EPSILON = 1e-8
+DEV_SIZE = 10_000  # held-out validation set size
 
 
-def load_data(path: str):
-    data = pd.read_csv(path).to_numpy(dtype=np.float32)
-    m, n = data.shape
-    np.random.shuffle(data)
+def load_data(path: Path, dev_size: int = DEV_SIZE):
+    """
+    Load the MNIST-100 dataset from the compressed archive and return
+    training / validation splits flattened to (features, samples).
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Dataset not found at '{path}'")
 
-    data_dev = data[:10000].T
-    Y_dev = data_dev[0].astype(np.int64)
-    X_dev = data_dev[1:n]
+    with np.load(path) as data:
+        train_images = data["train_images"].astype(np.float32)
+        train_labels = data["train_labels"].astype(np.int64)
+        test_images = data["test_images"].astype(np.float32)
+        test_labels = data["test_labels"].astype(np.int64)
 
-    data_train = data[10000:].T
-    Y_train = data_train[0].astype(np.int64)
-    X_train = data_train[1:n]
+    # Flatten images to column-major format (features, samples)
+    X_full = train_images.reshape(train_images.shape[0], -1).T  # (input_dim, m)
+    Y_full = train_labels
 
-    return X_train, Y_train, X_dev, Y_dev
+    # Shuffle before splitting to validation
+    permutation = np.random.permutation(X_full.shape[1])
+    X_full = X_full[:, permutation]
+    Y_full = Y_full[permutation]
+
+    X_dev = X_full[:, :dev_size]
+    Y_dev = Y_full[:dev_size]
+    X_train = X_full[:, dev_size:]
+    Y_train = Y_full[dev_size:]
+
+    # Also flatten the test set for later reuse if needed.
+    X_test = test_images.reshape(test_images.shape[0], -1).T
+
+    return X_train, Y_train, X_dev, Y_dev, X_test, test_labels
 
 
 def normalize_features(X_train, X_dev):
+    """
+    Normalize features to zero mean and unit variance using the training set.
+    """
     X_train /= 255.0
     X_dev /= 255.0
 
@@ -210,7 +248,10 @@ def train_model(X_train, Y_train, X_dev, Y_dev):
         _, dev_probs = forward_prop(X_dev, params)
         dev_accuracy = get_accuracy(dev_probs, Y_dev)
 
-        print(f"Epoch {epoch:02d} - loss: {epoch_loss:.4f} - train_acc: {train_accuracy:.4f} - dev_acc: {dev_accuracy:.4f}")
+        print(
+            f"Epoch {epoch:02d} - loss: {epoch_loss:.4f} "
+            f"- train_acc: {train_accuracy:.4f} - dev_acc: {dev_accuracy:.4f}"
+        )
 
     return params
 
@@ -222,51 +263,30 @@ def evaluate(params, X, Y):
     return predictions, accuracy
 
 
-def save_model(params, mean, std, filepath="archive/trained_model.npz"):
-    """
-    Save trained model parameters to disk
-    
-    Args:
-        params: Dictionary of model parameters (W1, b1, W2, b2, W3, b3)
-        filepath: Path to save the model file
-    """
-    print(f"\nSaving trained model to '{filepath}'...")
-    np.savez(filepath, **params, mean=mean, std=std)
-    print(f"Model saved successfully!")
-
-
-def load_model(filepath="archive/trained_model.npz"):
-    """
-    Load trained model parameters from disk
-    
-    Args:
-        filepath: Path to the saved model file
-    
-    Returns:
-        params: Dictionary of model parameters
-    """
-    print(f"Loading model from '{filepath}'...")
-    loaded = np.load(filepath)
-    params = {key: loaded[key] for key in loaded.files if key not in {"mean", "std"}}
-    mean = loaded["mean"]
-    std = loaded["std"]
-    print(f"Model loaded successfully!")
-    return params, mean, std
+def save_model(params, mean, std, filepath=None):
+    target_path = Path(filepath) if filepath is not None else ARCHIVE_DIR / "trained_model.npz"
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"\nSaving trained model to '{target_path}'...")
+    np.savez(target_path, **params, mean=mean, std=std)
+    print("Model saved successfully!")
 
 
 def main():
-    X_train, Y_train, X_dev, Y_dev = load_data("archive/mnist_train.csv")
+    print(f"Loading dataset from '{DATASET_PATH}'...")
+    X_train, Y_train, X_dev, Y_dev, _, _ = load_data(DATASET_PATH)
     X_train, X_dev, mean, std = normalize_features(X_train, X_dev)
 
-    print(f"Training samples: {X_train.shape[1]}, features: {X_train.shape[0]}")
+    print(
+        f"Training samples: {X_train.shape[1]}, features: {X_train.shape[0]} "
+        f"| Dev samples: {X_dev.shape[1]}"
+    )
 
     params = train_model(X_train, Y_train, X_dev, Y_dev)
 
-    dev_predictions, dev_accuracy = evaluate(params, X_dev, Y_dev)
+    _, dev_accuracy = evaluate(params, X_dev, Y_dev)
     print(f"\nFinal Dev Accuracy: {dev_accuracy:.4f}")
-    
-    # Save the trained model
-    save_model(params, mean, std, "archive/trained_model.npz")
+
+    save_model(params, mean, std, ARCHIVE_DIR / "trained_model_mnist100.npz")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,1 @@
+Now building to a more complex NN to predict all 100 digits from 00-99
