@@ -51,3 +51,16 @@ python app.py          # launch the sketchpad digit inspector
 ```
 
 Everything—from data ingestion to UI—runs in this repo with pure NumPy. No high-level ML frameworks, yet the model still delivers **97%+** accuracy and production-grade UX.
+
+---
+
+## MNIST-100 (00–99) Extension
+```bash
+cd MNIST-100
+python training-100.py --mode auto-train --trials 8 --epochs 12 --final-epochs 40 --history-dir runs/auto --seed 42
+python test_model.py --model archive/trained_model_mnist100.npz
+python app.py
+```
+
+- Auto-train performs a random hyperparameter search, retrains with early stopping, and writes the `.npz` bundle the app consumes.
+- History CSVs and search summaries land under `MNIST-100/runs/`, making it easy to track experiments before launching the production Gradio interface.
