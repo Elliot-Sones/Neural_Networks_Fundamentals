@@ -1,12 +1,6 @@
-# Simple Neural Network to production-ready digit classifier
+# Building a Multi-Layered Perceptron to production-ready digit classifier
 
-Neural networks form the foundation of modern machine learning, so I wanted to go beyond using libraries and truly understand how they work. To do that, I built a neural network completely from scratch using only NumPy—no frameworks, no shortcuts. This project gave me a hands-on understanding of core concepts like forward propagation, backpropagation, and gradient descent, and helped me see exactly how data flows and learns within a model.
-
-From scratch to production-ready—all in NumPy. Here’s the path, step by step, from me explaining the math and the steps I took to the final demo. 
-
-
-
-## Neural Network full walkthrough from Scratch: 
+**Goal:** Build a MLP to be able to predict hand drawn digits from 0-9
 
 ## Demo: 
 Try it for yourself: https://huggingface.co/spaces/Eli181927/elliot_digit_classifier
@@ -25,6 +19,7 @@ Or watch demo video:
 - Architecture: 784 → 10 (single linear layer) with softmax, trained via full-batch gradient descent.
 - Result: **92.6% dev accuracy**, **91–92% test accuracy**.
 - Takeaway: even a naive implementation works, but capacity and optimization limit headroom.
+
 
 ## Results after 1st iteration: 
 - 92% on both train and dev set with loss stuck on 0.28. The capacity was too low. 
