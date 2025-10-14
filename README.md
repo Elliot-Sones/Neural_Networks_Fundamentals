@@ -3,6 +3,11 @@
 Neural Networks are the foundation of modern machine learning so I wanted to build and push my understanding of Neural Networks by building them from scratch (no libraries except NumPy). My goal was to build a simple MLP classification for digits 0-9, then push my understanding by implementing a CNN for classifying digits 00-99 while explaining every step and getting the model into production.
 
 ## Digits 0-9: Simple Mutli-Layered Perceptron (MNIST)
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=RzZ32FRI4nI">
+    <img src="https://img.youtube.com/vi/RzZ32FRI4nI/hqdefault.jpg" width="300" />
+  </a>
+</p>
 [Try the MLP here](https://huggingface.co/spaces/Eli181927/elliot_digit_classifier/)
 
 Simple explanation:
