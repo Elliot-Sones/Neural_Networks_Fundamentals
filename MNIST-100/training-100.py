@@ -1,3 +1,4 @@
+
 """
 Training script for the MNIST-100 dataset (digits 00-99).
 
