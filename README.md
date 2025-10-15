@@ -8,6 +8,7 @@ Neural Networks are the foundation of modern machine learning so I wanted to bui
     <img src="https://img.youtube.com/vi/RzZ32FRI4nI/hqdefault.jpg" width="300" />
   </a>
 </p>
+
 [Try the MLP here](https://huggingface.co/spaces/Eli181927/elliot_digit_classifier/)
 
 Simple explanation:
