@@ -14,7 +14,10 @@ Or watch demo video:
   </a>
 </p>
 
-## My demo walkthough why it works
+## My demo walkthough **why** it works
+
+
+## [Read training file to learn how to implement](/1.MLP/training.py)
 
 ## My process
 
@@ -47,7 +50,7 @@ Or watch demo video:
 </table>
 
 <p align="center">
-  <img src="assets/iteration1/iteration1_common_confusions.png" width="600" alt="Common digit classification mistakes" />
+  <img src="assets/iteration1/iteration1_common_confusions.png" width="400" alt="Common digit classification mistakes" />
   <br><strong>Common Confusions</strong>
   <br>Grid of classic mistakes (4→9, 3→5, 7→1, etc.).
 
