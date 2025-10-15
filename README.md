@@ -19,7 +19,7 @@ Who this repo is for: Have some prior knowledge of the theory and looking for si
 - **Implementation** – 3-layer ReLU MLP trained with Adam, He init, and L2 regularization.
 - **Result** – About 97% accuracy on the held-out test set.
 
-For detailed implementation and results, see the [MNIST README](MNIST/README.md). 
+For detailed implementation and results, see the [MLP README](1.MLP/README.md). 
 
 
 
@@ -34,10 +34,14 @@ For detailed implementation and results, see the [MNIST README](MNIST/README.md)
 - **Implementation** – Stride-1 CNN with pooling, dropout, Adam, and auto-tuning to streamline training.
 - **Result** – Consistently around 90% dev accuracy powering the production Gradio demo.
 
-For detailed implementation, explanation and results see the [MNSIT-100 README](MNIST-100/README.md)
+For detailed implementation, explanation and results see the [CNN README](2.CNN//README.md)
 
 
 ## 3. Recurrent Neural Network: Hand drawn doodles classification.
 [Try the RNN here]()
 
 #### Simple explanation
+
+
+
+For detailed implementation and results, see the [RNN README](3.RNN/README.md)
