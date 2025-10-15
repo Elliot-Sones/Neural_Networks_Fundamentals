@@ -68,10 +68,14 @@ and pen_lift is 1 at the end of a stroke, else 0
 
 def parse_drawing_to_seq(drawing_str: str) -> np.ndarray:
 
+    # Prefer fast JSON parsing; fall back to ast for robustness
     try:
-        strokes = ast.literal_eval(drawing_str)
+        strokes = json.loads(drawing_str)
     except Exception:
-        return np.zeros((0, 3), dtype=np.float32)
+        try:
+            strokes = ast.literal_eval(drawing_str)
+        except Exception:
+            return np.zeros((0, 3), dtype=np.float32)
 
     seq_parts = []
     for stroke in strokes:
@@ -111,24 +115,6 @@ class SketchDataset(Dataset):
         self.max_len = max_len
         self.min_seq_len = min_seq_len
 
-        # Keep only rows with enough sequence length
-        valid_indices = []
-        for i, s in enumerate(self.frame["drawing"].values):
-            # fast length check without full array build:
-            try:
-                strokes = ast.literal_eval(s)
-                length = 0
-                for st in strokes:
-                    x = st[0]
-                    length += max(0, len(x) - 1)
-                if length >= self.min_seq_len:
-                    valid_indices.append(i)
-            except Exception:
-                pass
-
-        if len(valid_indices) < len(self.frame):
-            self.frame = self.frame.iloc[valid_indices].reset_index(drop=True)
-
     def __len__(self):
         return len(self.frame)
 
@@ -139,13 +125,24 @@ class SketchDataset(Dataset):
         return seq, label
 
 
-def collate_pad(batch: List[Tuple[np.ndarray, int]], max_len: int):
-    # batch: list of (seq_np[T,3], label_int)
-    sequences, labels = zip(*batch)
-    lengths = [min(s.shape[0], max_len) for s in sequences]
-    if len(lengths) == 0:
-        raise RuntimeError("Empty batch encountered.")
+def collate_pad(batch: List[Tuple[np.ndarray, int]], max_len: int, min_seq_len: int | None = None):
+    # Filter out too-short sequences to avoid zero-length packs
+    filtered: List[Tuple[np.ndarray, int]] = []
+    for seq, label in batch:
+        L = min(seq.shape[0], max_len)
+        if min_seq_len is not None and L < max(1, min_seq_len):
+            continue
+        filtered.append((seq, label))
 
+    if not filtered:
+        # Fallback: keep the longest from original batch; ensure at least length 1
+        seq, label = max(batch, key=lambda t: t[0].shape[0])
+        if seq.shape[0] == 0:
+            seq = np.zeros((1, 3), dtype=np.float32)
+        filtered = [(seq[:max_len], label)]
+
+    sequences, labels = zip(*filtered)
+    lengths = [min(s.shape[0], max_len) for s in sequences]
     maxL = max(1, min(max(lengths), max_len))
     B = len(sequences)
     x = torch.zeros((B, maxL, 3), dtype=torch.float32)
@@ -163,11 +160,12 @@ class CollatePad:
 
     Avoids lambda/nested functions which break with num_workers>0 on macOS/Windows.
     """
-    def __init__(self, max_len: int):
+    def __init__(self, max_len: int, min_seq_len: int | None = None):
         self.max_len = max_len
+        self.min_seq_len = min_seq_len
 
     def __call__(self, batch: List[Tuple[np.ndarray, int]]):
-        return collate_pad(batch, self.max_len)
+        return collate_pad(batch, self.max_len, self.min_seq_len)
 
 """
 Section 4: Gru classifier. It reads the sequence, form a memeory of the shape and then map the memory to a label
@@ -226,13 +224,13 @@ def topk_accuracy(logits: torch.Tensor, targets: torch.Tensor, ks=(1, 3)):
         return res
 
 
-def train_one_epoch(model, loader, optimizer, device, grad_clip=1.0, label_smoothing=0.05):
+def train_one_epoch(model, loader, optimizer, device, grad_clip=1.0, label_smoothing=0.05, log_interval: int = 0):
     model.train()
     criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
     total_loss, total_correct, total_count = 0.0, 0, 0
     total_top3 = 0.0
 
-    for x, lengths, y in loader:
+    for batch_idx, (x, lengths, y) in enumerate(loader):
         x = x.to(device)
         y = y.to(device)
         lengths = lengths.to(device)
@@ -251,6 +249,13 @@ def train_one_epoch(model, loader, optimizer, device, grad_clip=1.0, label_smoot
         total_correct += acc1 * y.size(0)
         total_top3 += acc3 * y.size(0)
         total_count += y.size(0)
+
+        if log_interval and ((batch_idx + 1) % log_interval == 0):
+            curr_lr = optimizer.param_groups[0]["lr"]
+            print(
+                f"  Batch {batch_idx + 1}/{len(loader)} | "
+                f"loss={loss.item():.4f} acc1={acc1:.3f} lr={curr_lr:.3g}"
+            )
 
     return {
         "loss": total_loss / total_count,
@@ -327,7 +332,7 @@ def make_loaders(train_df, val_df, classes, cfg: Config):
     class_to_idx = {c: i for i, c in enumerate(classes)}
     train_ds = SketchDataset(train_df, class_to_idx, max_len=cfg.max_len, min_seq_len=cfg.min_seq_len)
     val_ds = SketchDataset(val_df, class_to_idx, max_len=cfg.max_len, min_seq_len=cfg.min_seq_len)
-    collator = CollatePad(cfg.max_len)
+    collator = CollatePad(cfg.max_len, cfg.min_seq_len)
 
     train_loader = DataLoader(
         train_ds,
@@ -336,7 +341,7 @@ def make_loaders(train_df, val_df, classes, cfg: Config):
         num_workers=cfg.num_workers,
         collate_fn=collator,
         drop_last=False,
-        persistent_workers=False,
+        persistent_workers=True,
     )
     val_loader = DataLoader(
         val_ds,
@@ -345,7 +350,7 @@ def make_loaders(train_df, val_df, classes, cfg: Config):
         num_workers=cfg.num_workers,
         collate_fn=collator,
         drop_last=False,
-        persistent_workers=False,
+        persistent_workers=True,
     )
 
     return train_loader, val_loader, class_to_idx
@@ -410,7 +415,8 @@ def run_training(cfg: Config):
         t0 = time.time()
         train_metrics = train_one_epoch(
             model, train_loader, optimizer, device,
-            grad_clip=cfg.grad_clip, label_smoothing=cfg.label_smoothing
+            grad_clip=cfg.grad_clip, label_smoothing=cfg.label_smoothing,
+            log_interval=100
         )
         val_metrics = evaluate(
             model, val_loader, device, label_smoothing=0.0

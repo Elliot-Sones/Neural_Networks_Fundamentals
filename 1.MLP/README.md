@@ -15,6 +15,7 @@ Or watch demo video:
 </p>
 
 
+#My process
 
 ## 1st iteration: Simple Multi Layer Perceptron
 - Architecture: 784 → 10 (single linear layer) with softmax, trained via full-batch gradient descent.

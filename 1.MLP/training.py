@@ -1,3 +1,6 @@
+"""
+Section 1: Imports and training paramaters for the MLP model 
+"""
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -21,6 +24,9 @@ BETA2 = 0.999
 EPSILON = 1e-8
 
 
+"""
+Section 2: Loads the input data, transposes (so arrays are feature x samples) and normalises it (scales features to 0-1)
+"""
 def load_data(path):
     path = Path(path)
     data = pd.read_csv(path).to_numpy(dtype=np.float32)
@@ -51,6 +57,9 @@ def normalize_features(X_train, X_dev):
     return X_train, X_dev, mean, std
 
 
+"""
+Section 3: Initialises the parameters (layers, weights and biases) and adam optimizer
+"""
 def init_params():
     layer_dims = [INPUT_DIM, *HIDDEN_DIMS, OUTPUT_DIM]
     params = {}
@@ -59,7 +68,6 @@ def init_params():
         params[f"W{idx}"] = np.random.randn(layer_dims[idx], fan_in) * np.sqrt(2.0 / fan_in)
         params[f"b{idx}"] = np.zeros((layer_dims[idx], 1), dtype=np.float32)
     return params
-
 
 def init_adam(params):
     v = {}
@@ -70,6 +78,9 @@ def init_adam(params):
     return v, s
 
 
+"""
+Section 4: Defines the relu activation function ReLu (and backward ReLu) function, softmax function and one hot encoding function
+"""
 def relu(Z):
     return np.maximum(0.0, Z)
 
@@ -90,6 +101,9 @@ def one_hot(Y, num_classes=OUTPUT_DIM):
     return one_hot_y
 
 
+"""
+Section 5: Forward propagation (foward pass and activation functions - ReLu and softmax) and returns the cache and the class probabilities
+"""
 def forward_prop(X, params):
     W1, b1 = params["W1"], params["b1"]
     W2, b2 = params["W2"], params["b2"]
@@ -115,6 +129,9 @@ def forward_prop(X, params):
     return cache, A3
 
 
+"""
+Section 6: Computes the loss and l2 regularization and returns the total loss
+"""
 def compute_loss(probs, Y_batch, params):
     m = Y_batch.shape[1]
     log_likelihood = -np.log(probs + 1e-9) * Y_batch
@@ -128,6 +145,9 @@ def compute_loss(probs, Y_batch, params):
     return data_loss + l2_loss
 
 
+"""
+Section 7: Back propagation (backward pass and activation functions - ReLu and softmax) and returns the gradients
+"""
 def back_prop(cache, Y_batch, params):
     m = Y_batch.shape[1]
     grads = {}
@@ -156,6 +176,9 @@ def back_prop(cache, Y_batch, params):
     return grads
 
 
+"""
+Section 8: Updates the parameters using the adam optimizer usings the calculated gradients
+"""
 def update_params_adam(params, grads, v, s, t):
     updated_params = {}
     for key in params:
@@ -170,6 +193,9 @@ def update_params_adam(params, grads, v, s, t):
     return updated_params, v, s
 
 
+"""
+Section 9: Gets the predictions and accuracy
+"""
 def get_predictions(probs):
     return np.argmax(probs, axis=0)
 
@@ -179,6 +205,9 @@ def get_accuracy(probs, labels):
     return np.mean(predictions == labels)
 
 
+"""
+Section 10: Trains the model using the adam optimizer and returns the trained parameters
+"""
 def train_model(X_train, Y_train, X_dev, Y_dev):
     params = init_params()
     v, s = init_adam(params)
@@ -220,6 +249,10 @@ def train_model(X_train, Y_train, X_dev, Y_dev):
     return params
 
 
+"""
+Section 11: Evaluates and saves+loads the model
+"""
+
 def evaluate(params, X, Y):
     _, probs = forward_prop(X, params)
     predictions = get_predictions(probs)
@@ -228,13 +261,6 @@ def evaluate(params, X, Y):
 
 
 def save_model(params, mean, std, filepath=None):
-    """
-    Save trained model parameters to disk
-    
-    Args:
-        params: Dictionary of model parameters (W1, b1, W2, b2, W3, b3)
-        filepath: Path to save the model file
-    """
     target_path = Path(filepath) if filepath is not None else ARCHIVE_DIR / "trained_model.npz"
     target_path.parent.mkdir(parents=True, exist_ok=True)
     print(f"\nSaving trained model to '{target_path}'...")
@@ -243,15 +269,6 @@ def save_model(params, mean, std, filepath=None):
 
 
 def load_model(filepath=None):
-    """
-    Load trained model parameters from disk
-    
-    Args:
-        filepath: Path to the saved model file
-    
-    Returns:
-        params: Dictionary of model parameters
-    """
     source_path = Path(filepath) if filepath is not None else ARCHIVE_DIR / "trained_model.npz"
     print(f"Loading model from '{source_path}'...")
     loaded = np.load(source_path)
@@ -262,6 +279,9 @@ def load_model(filepath=None):
     return params, mean, std
 
 
+"""
+Section 12: main function, trains the model and prints final dev accuracy and saves the model
+"""
 def main():
     X_train, Y_train, X_dev, Y_dev = load_data(ARCHIVE_DIR / "mnist_train.csv")
     X_train, X_dev, mean, std = normalize_features(X_train, X_dev)
