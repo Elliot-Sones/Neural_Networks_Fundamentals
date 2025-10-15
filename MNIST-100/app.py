@@ -3,6 +3,7 @@ import gradio as gr
 from PIL import Image, ImageOps
 from pathlib import Path
 import importlib.util
+import json
 
 
 OUTPUT_CLASSES = 100
@@ -160,7 +161,57 @@ def generate_inference_variants(arr):
     return variants
 
 
-def preprocess_image(img_input, stroke_scale: float = 1.0):
+def _auto_balance_stroke(arr: np.ndarray, *, target_mass_fraction: float, clamp: tuple[float, float]):
+    mass_fraction = float(arr.sum() / (TARGET_HEIGHT * TARGET_WIDTH))
+    if mass_fraction <= 1e-6:
+        return arr, 1.0, mass_fraction
+    scale = np.sqrt(target_mass_fraction / mass_fraction)
+    min_scale, max_scale = clamp
+    scale = float(np.clip(scale, min_scale, max_scale))
+    adjusted = np.clip(arr * scale, 0.0, 1.0)
+    new_mass_fraction = float(adjusted.sum() / (TARGET_HEIGHT * TARGET_WIDTH))
+    return adjusted, scale, new_mass_fraction
+
+
+def compose_dual_canvas(left_input, right_input):
+    left_img = extract_canvas_array(left_input)
+    right_img = extract_canvas_array(right_input)
+
+    if left_img is None and right_img is None:
+        return None
+
+    if left_img is None:
+        if right_img is None:
+            return None
+        base_size = right_img.size
+        left_img = Image.new("L", base_size, color=255)
+    if right_img is None:
+        base_size = left_img.size
+        right_img = Image.new("L", base_size, color=255)
+
+    left_img = left_img.convert("L")
+    right_img = right_img.convert("L")
+
+    if left_img.height != right_img.height:
+        target_height = min(left_img.height, right_img.height)
+        left_img = left_img.resize(
+            (left_img.width, target_height), Image.Resampling.LANCZOS
+        )
+        right_img = right_img.resize(
+            (right_img.width, target_height), Image.Resampling.LANCZOS
+        )
+
+    combined = Image.new(
+        "L",
+        (left_img.width + right_img.width, left_img.height),
+        color=255,
+    )
+    combined.paste(left_img, (0, 0))
+    combined.paste(right_img, (left_img.width, 0))
+    return combined
+
+
+def preprocess_image(img_input, stroke_scale: float = 1.0, *, auto_balance: bool = True):
     ensure_model_loaded()
     img = extract_canvas_array(img_input)
     if img is None:
@@ -235,6 +286,16 @@ def preprocess_image(img_input, stroke_scale: float = 1.0):
     stroke_scale = max(0.3, min(stroke_scale, 1.5))
     arr_resized = np.clip(arr_resized * stroke_scale, 0.0, 1.0)
 
+    auto_balance_scale = 1.0
+    balanced_mass_fraction = float(arr_resized.sum() / (TARGET_HEIGHT * TARGET_WIDTH))
+    if auto_balance:
+        target_mass = sum(METRIC_TARGETS["mass_fraction"]) / 2.0
+        arr_resized, auto_balance_scale, balanced_mass_fraction = _auto_balance_stroke(
+            arr_resized,
+            target_mass_fraction=target_mass,
+            clamp=(0.7, 1.4),
+        )
+
     augmented_arrays = [arr_resized, *generate_inference_variants(arr_resized)]
     augmented_standardized = [
         (arr.reshape(TARGET_HEIGHT * TARGET_WIDTH, 1) - mean) / std_safe
@@ -252,6 +313,11 @@ def preprocess_image(img_input, stroke_scale: float = 1.0):
         augmented_standardized[0],
         std_safe,
     )
+    diagnostics["applied_auto_balance"] = {
+        "enabled": bool(auto_balance),
+        "scale": float(auto_balance_scale),
+        "mass_fraction_after": float(balanced_mass_fraction),
+    }
 
     return augmented_standardized, arr_resized, mean_diff_uint8, diagnostics
 
@@ -424,15 +490,27 @@ def enrich_diagnostics(stats, probs):
     return stats
 
 
-def predict_number(img_input, stroke_scale):
+def predict_number(left_canvas, right_canvas, stroke_scale, auto_balance):
     ensure_model_loaded()
-    result = preprocess_image(img_input, stroke_scale=stroke_scale)
+    combined_canvas = compose_dual_canvas(left_canvas, right_canvas)
+    if combined_canvas is None:
+        blank_probs = {f"{i:02d}": 0.0 for i in range(OUTPUT_CLASSES)}
+        empty_preview = np.zeros((TARGET_HEIGHT, TARGET_WIDTH), dtype=np.uint8)
+        empty_diff = np.zeros((TARGET_HEIGHT, TARGET_WIDTH), dtype=np.uint8)
+        diagnostics = {"warnings": ["Draw both digits to see diagnostics."]}
+        return None, blank_probs, empty_preview, empty_diff, json.dumps(diagnostics, indent=2)
+
+    result = preprocess_image(
+        combined_canvas,
+        stroke_scale=stroke_scale,
+        auto_balance=bool(auto_balance),
+    )
     if result is None:
         blank_probs = {f"{i:02d}": 0.0 for i in range(OUTPUT_CLASSES)}
         empty_preview = np.zeros((TARGET_HEIGHT, TARGET_WIDTH), dtype=np.uint8)
         empty_diff = np.zeros((TARGET_HEIGHT, TARGET_WIDTH), dtype=np.uint8)
         diagnostics = {"warnings": ["Draw a number to see diagnostics."]}
-        return None, blank_probs, empty_preview, empty_diff, diagnostics
+        return None, blank_probs, empty_preview, empty_diff, json.dumps(diagnostics, indent=2)
 
     standardized_variants, preview, mean_diff, diagnostics = result
 
@@ -444,26 +522,29 @@ def predict_number(img_input, stroke_scale):
 
     pred = int(get_predictions(probs)[0])
 
-    prob_dict = {f"{i:02d}": float(probs[i, 0]) for i in range(OUTPUT_CLASSES)}
+    prob_rows = [[f"{i:02d}", float(probs[i, 0])] for i in range(OUTPUT_CLASSES)]
+    prob_rows.sort(key=lambda r: r[1], reverse=True)
     diagnostics = enrich_diagnostics(diagnostics, probs)
     diagnostics["variants_used"] = int(probs_matrix.shape[1])
     diagnostics["variant_top_confidences"] = [
         float(probs_matrix[pred, idx]) for idx in range(probs_matrix.shape[1])
     ]
-    return pred, prob_dict, (preview * 255).astype(np.uint8), mean_diff, diagnostics
+    return pred, prob_rows, (preview * 255).astype(np.uint8), mean_diff, json.dumps(diagnostics, indent=2)
 
 
 with gr.Blocks() as demo:
     gr.Markdown(
         """
         # Elliot's MNIST-100 Classifier
-        Draw a two-digit number (00-99). The model will predict the number, show the top class probabilities, and display diagnostics for the processed input.
+        Draw a two-digit number (00-99). Use the left canvas for the tens digit and the right canvas for the ones digit. The model will predict the number, show the top class probabilities, and display diagnostics for the processed input.
         """
     )
 
     with gr.Row():
         with gr.Column(scale=1):
-            canvas = gr.Sketchpad()
+            with gr.Row():
+                left_canvas = gr.Sketchpad(label="Tens Digit")
+                right_canvas = gr.Sketchpad(label="Ones Digit")
             stroke_slider = gr.Slider(
                 minimum=0.3,
                 maximum=1.2,
@@ -471,33 +552,49 @@ with gr.Blocks() as demo:
                 step=0.05,
                 label="Stroke Intensity (scale)",
             )
+            auto_balance = gr.Checkbox(
+                value=True,
+                label="Auto Balance Stroke Thickness",
+                info="Automatically rescales the digit to match training mass and brightness.",
+            )
 
         with gr.Column(scale=1):
             pred_box = gr.Number(label="Predicted Number", precision=0, value=None)
-            label = gr.Label(
-                num_top_classes=5,
-                label="Class Probabilities",
-                value={f"{i:02d}": 0.0 for i in range(OUTPUT_CLASSES)},
-            )
+            prob_table = gr.Dataframe(label="Class Probabilities", interactive=False)
             preview = gr.Image(label="Model Input Preview (28x56)", image_mode="L")
             mean_diff_view = gr.Image(label="Difference vs Training Mean", image_mode="L")
-            diagnostics_box = gr.JSON(label="Diagnostics")
+            diagnostics_box = gr.Code(label="Diagnostics (JSON)", language="json")
             predict_btn = gr.Button("Predict", variant="primary")
             clear_btn = gr.ClearButton(
-                [canvas, stroke_slider, pred_box, label, preview, mean_diff_view, diagnostics_box]
+                [
+                    left_canvas,
+                    right_canvas,
+                    stroke_slider,
+                    auto_balance,
+                    pred_box,
+                    prob_table,
+                    preview,
+                    mean_diff_view,
+                    diagnostics_box,
+                ]
             )
 
     predict_btn.click(
         fn=predict_number,
-        inputs=[canvas, stroke_slider],
-        outputs=[pred_box, label, preview, mean_diff_view, diagnostics_box],
+        inputs=[left_canvas, right_canvas, stroke_slider, auto_balance],
+        outputs=[pred_box, prob_table, preview, mean_diff_view, diagnostics_box],
     )
-    canvas.change(
+    left_canvas.change(
         fn=predict_number,
-        inputs=[canvas, stroke_slider],
-        outputs=[pred_box, label, preview, mean_diff_view, diagnostics_box],
+        inputs=[left_canvas, right_canvas, stroke_slider, auto_balance],
+        outputs=[pred_box, prob_table, preview, mean_diff_view, diagnostics_box],
+    )
+    right_canvas.change(
+        fn=predict_number,
+        inputs=[left_canvas, right_canvas, stroke_slider, auto_balance],
+        outputs=[pred_box, prob_table, preview, mean_diff_view, diagnostics_box],
     )
 
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(server_name="127.0.0.1", share=True)

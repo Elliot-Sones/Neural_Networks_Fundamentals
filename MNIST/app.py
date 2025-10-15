@@ -2,6 +2,7 @@ import numpy as np
 import gradio as gr
 from PIL import Image, ImageOps
 from pathlib import Path
+import json
 
 # Reuse existing helpers from your project
 from training import load_model
@@ -141,10 +142,10 @@ def predict_digit(img_input):
     ensure_model_loaded()
     result = preprocess_image(img_input)
     if result is None:
-        blank_probs = {str(i): 0.0 for i in range(10)}
+        blank_probs = [[str(i), 0.0] for i in range(10)]
         empty_preview = np.zeros((28, 28), dtype=np.uint8)
         diagnostics = {"warnings": ["Draw a digit to see diagnostics."]}
-        return None, blank_probs, empty_preview, diagnostics
+        return None, blank_probs, empty_preview, json.dumps(diagnostics, indent=2)
 
     x, preview, diagnostics = result
 
@@ -152,10 +153,11 @@ def predict_digit(img_input):
     _, probs = forward_prop(x, params)
     pred = int(get_predictions(probs)[0])
 
-    # Convert probabilities to dict for Label component
-    prob_dict = {str(i): float(probs[i, 0]) for i in range(10)}
+    # Prepare sorted rows for a Dataframe component
+    prob_rows = [[str(i), float(probs[i, 0])] for i in range(10)]
+    prob_rows.sort(key=lambda r: r[1], reverse=True)
     diagnostics = enrich_diagnostics(diagnostics, probs)
-    return pred, prob_dict, (preview * 255).astype(np.uint8), diagnostics
+    return pred, prob_rows, (preview * 255).astype(np.uint8), json.dumps(diagnostics, indent=2)
 
 
 def compute_diagnostics(arr_28_float, bbox, original_shape, mean_image):
@@ -283,19 +285,24 @@ with gr.Blocks() as demo:
 
         with gr.Column(scale=1):
             pred_box = gr.Number(label="Predicted Digit", precision=0, value=None)
-            label = gr.Label(num_top_classes=10, label="Class Probabilities", value={str(i): 0.0 for i in range(10)})
+            prob_table = gr.Dataframe(
+                label="Class Probabilities",
+                headers=["digit", "probability"],
+                datatype=["str", "number"],
+                interactive=False,
+            )
             preview = gr.Image(label="Model Input Preview (28x28)", image_mode="L")
-            diagnostics_box = gr.JSON(label="Diagnostics")
+            diagnostics_box = gr.Code(label="Diagnostics (JSON)", language="json")
             predict_btn = gr.Button("Predict", variant="primary")
-            clear_btn = gr.ClearButton([canvas, pred_box, label, preview, diagnostics_box])
+            clear_btn = gr.ClearButton([canvas, pred_box, prob_table, preview, diagnostics_box])
 
     # Wire interactions
     # Predict on demand
-    predict_btn.click(fn=predict_digit, inputs=canvas, outputs=[pred_box, label, preview, diagnostics_box])
+    predict_btn.click(fn=predict_digit, inputs=canvas, outputs=[pred_box, prob_table, preview, diagnostics_box])
     # Also try updating on change (may be a no-op depending on version)
-    canvas.change(fn=predict_digit, inputs=canvas, outputs=[pred_box, label, preview, diagnostics_box])
+    canvas.change(fn=predict_digit, inputs=canvas, outputs=[pred_box, prob_table, preview, diagnostics_box])
     # ClearButton handles resetting components
 
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(server_name="127.0.0.1", share=False)
