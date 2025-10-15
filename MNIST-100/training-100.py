@@ -1,12 +1,3 @@
-
-"""
-Training script for the MNIST-100 dataset (digits 00-99).
-
-This adapts the original MNIST training pipeline to work with the new dataset
-packaged as an .npz file containing (28 x 56) grayscale images. Each image
-contains two digits side-by-side and is labeled with an integer in [0, 99].
-"""
-
 from __future__ import annotations
 
 import numpy as np

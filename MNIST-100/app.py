@@ -7,7 +7,7 @@ import importlib.util
 
 OUTPUT_CLASSES = 100
 TARGET_HEIGHT, TARGET_WIDTH = 28, 56
-STD_FLOOR = 1e-2
+STD_FLOOR = 1e-8
 METRIC_TARGETS = {
     "mass_fraction": (0.08, 0.35),
     "stroke_density": (0.12, 0.65),
@@ -30,6 +30,7 @@ def _load_training_module():
 training_mod = _load_training_module()
 forward_prop = training_mod.forward_prop
 get_predictions = training_mod.get_predictions
+softmax = training_mod.softmax
 
 
 def _metric_status(name, value):
@@ -435,22 +436,19 @@ def predict_number(img_input, stroke_scale):
 
     standardized_variants, preview, mean_diff, diagnostics = result
 
-    prob_accumulator = np.zeros((OUTPUT_CLASSES, 1), dtype=np.float32)
-    per_variant_probs = []
-    for variant in standardized_variants:
-        _, probs_variant = forward_prop(variant, params, training=False)
-        per_variant_probs.append(probs_variant)
-        prob_accumulator += probs_variant
+    variants_matrix = np.concatenate(standardized_variants, axis=1).astype(np.float32, copy=False)
+    cache, probs_matrix = forward_prop(variants_matrix, params, training=False)
+    logits_matrix = cache["Z_fc2"]
+    avg_logits = np.mean(logits_matrix, axis=1, keepdims=True)
+    probs = softmax(avg_logits)
 
-    probs = prob_accumulator / len(standardized_variants)
-    preds = get_predictions(probs)
-    pred = int(preds[0])
+    pred = int(get_predictions(probs)[0])
 
     prob_dict = {f"{i:02d}": float(probs[i, 0]) for i in range(OUTPUT_CLASSES)}
     diagnostics = enrich_diagnostics(diagnostics, probs)
-    diagnostics["variants_used"] = len(standardized_variants)
+    diagnostics["variants_used"] = int(probs_matrix.shape[1])
     diagnostics["variant_top_confidences"] = [
-        float(probs_variant[pred, 0]) for probs_variant in per_variant_probs
+        float(probs_matrix[pred, idx]) for idx in range(probs_matrix.shape[1])
     ]
     return pred, prob_dict, (preview * 255).astype(np.uint8), mean_diff, diagnostics
 

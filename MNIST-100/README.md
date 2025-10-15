@@ -1,8 +1,19 @@
 # MNIST-100 Production Pipeline
 
+**Goal**: Scale the MLP approach to recognizing two-digit numbers.
+
+## Demo: 
+
+
+
+
+
+### 1st itreation
 This directory extends the original MNIST project to recognize **two-digit numbers (00–99)**. Images are (28 × 56) grayscale pairs of MNIST digits stored in `archive/mnist_compressed.npz`.
 
 The stack is still pure NumPy: a 3-layer MLP with He init, ReLU activations, dropout, Adam, early stopping, and lightweight data augmentation.
+
+
 
 ---
 
