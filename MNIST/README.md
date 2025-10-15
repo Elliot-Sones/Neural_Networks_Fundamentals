@@ -47,17 +47,6 @@ Or watch demo video:
   <img src="assets/iteration1/iteration1_common_confusions.png" width="600" alt="Common digit classification mistakes" />
   <br><strong>Common Confusions</strong>
   <br>Grid of classic mistakes (4→9, 3→5, 7→1, etc.).
-</p>
-```bash
-python iteration1/training.py
-```
-
-Artifacts land in `assets/iteration1/`:
-- `iteration1_loss_plateau.png` – train vs dev loss with the late-epoch plateau highlighted.
-- `iteration1_loss_wobble.png` – zoomed view of the oscillating loss after the plateau.
-- `iteration1_common_confusions.png` – grid of classic mistakes (4→9, 3→5, 7→1, etc.).
-
-Use these static plots for screenshots or to embed directly into the README to call out the first-iteration failure modes.
 
 ## 2nd Iteration: Architecture and Training Improvements 
 - Architecture upgrade: 784 → 256 → 128 → 10 with ReLU activations.
