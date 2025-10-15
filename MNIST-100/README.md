@@ -14,19 +14,23 @@
 Wanted to try to implement the MLP with this new data but with some changes to handle the new input data. I got 99% on train and 87% on dev.
 
 
+<table>
+  <tr>
+    <td align="center">
+      <img src="assets/loss_curve.png" alt="Loss curve" width="420"/><br/>
+      <em>Training loss over epochs</em>
+    </td>
+    <td align="center">
+      <img src="assets/accuracy_curves.png" alt="Accuracy curves" width="420"/><br/>
+      <em>Train vs Dev accuracy — note widening gap</em>
+    </td>
+  </tr>
+  
+</table>
+
 <p align="center">
-  <img src="assets/loss_curve.png" alt="Loss curve" width="420"/>
-  <br/>
-  <em>Training loss over epochs</em>
-  <br/><br/>
-  <img src="assets/accuracy_curves.png" alt="Accuracy curves" width="420"/>
-  <br/>
-  <em>Train vs Dev accuracy — note widening gap</em>
-  <br/><br/>
-  <img src="assets/generalization_gap.png" alt="Generalization gap" width="420"/>
-  <br/>
+  <img src="assets/generalization_gap.png" alt="Generalization gap" width="420"/><br/>
   <em>Generalization gap (train − dev), highlighting overfitting</em>
-  <br/>
 </p>
 
 
