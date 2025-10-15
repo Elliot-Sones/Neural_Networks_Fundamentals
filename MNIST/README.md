@@ -30,11 +30,15 @@ Or watch demo video:
 <tr>
 <td width="50%">
   <img src="assets/iteration1/iteration1_loss_plateau.png" width="100%" alt="Loss plateau showing training and dev loss" />
-  <p align="center"><strong>Loss Plateau</strong></p>
+  <p align="center"><strong>Loss Plateau</strong>
+  <br>Train vs dev loss with the late-epoch plateau highlighted.
+  </p>
 </td>
 <td width="50%">
   <img src="assets/iteration1/iteration1_loss_wobble.png" width="100%" alt="Zoomed view of oscillating loss" />
-  <p align="center"><strong>Loss Wobble</strong></p>
+  <p align="center"><strong>Loss Wobble</strong>
+  <br>Zoomed view of the oscillating loss after the plateau.
+  </p>
 </td>
 </tr>
 </table>
@@ -42,6 +46,7 @@ Or watch demo video:
 <p align="center">
   <img src="assets/iteration1/iteration1_common_confusions.png" width="600" alt="Common digit classification mistakes" />
   <br><strong>Common Confusions</strong>
+  <br>Grid of classic mistakes (4→9, 3→5, 7→1, etc.).
 </p>
 ```bash
 python iteration1/training.py
