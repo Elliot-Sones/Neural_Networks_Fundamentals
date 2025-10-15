@@ -1,0 +1,454 @@
+"""
+Section 1: This section manages imports, config, and device selection
+"""
+import os
+import ast
+import math
+import json
+import time
+from pathlib import Path
+from dataclasses import dataclass
+from typing import List, Tuple
+
+import numpy as np
+import pandas as pd
+import torch
+from torch import nn
+from torch.utils.data import Dataset, DataLoader
+from sklearn.model_selection import train_test_split
+
+
+def get_device():
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    elif torch.cuda.is_available():
+        return torch.device("cuda")
+    else:
+        return torch.device("cpu")
+
+
+def set_seed(seed: int = 42):
+    import random
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+@dataclass
+class Config:
+    csv_path: str = str((Path(__file__).resolve().parent / "archive" / "animal_doodles.csv"))
+    recognized_only: bool = True
+    min_seq_len: int = 6             # drop drawings with fewer than 6 moves
+    max_len: int = 250               # cap sequence length for speed/memory (faster first run)
+    per_class_limit: int = 1500      # limit per class for faster training; scale up later
+    test_size: float = 0.15          # stratified split fraction
+    batch_size: int = 64
+    num_workers: int = 2             # try 2 workers for faster loading on M2
+    input_size: int = 3              # [dx, dy, pen_lift]
+    hidden_size: int = 192
+    num_layers: int = 2
+    bidirectional: bool = True
+    dropout: float = 0.2
+    lr: float = 3e-3
+    weight_decay: float = 1e-2
+    label_smoothing: float = 0.05
+    epochs: int = 12                 # fewer epochs for quicker first pass
+    patience: int = 3                # earlier stop on plateau
+    grad_clip: float = 1.0
+    use_packing: bool = True         # if you see MPS issues, set to False
+    out_dir: str = str((Path(__file__).resolve().parent / "archive"))
+
+"""
+Section 2: This is a helper function to parse the drawing string into a sequence of [dx, dy, pen_lift] 
+where dx and dy are the normmalized (-1, 1) movements of the pen from the previous point
+and pen_lift is 1 at the end of a stroke, else 0
+"""
+
+def parse_drawing_to_seq(drawing_str: str) -> np.ndarray:
+
+    try:
+        strokes = ast.literal_eval(drawing_str)
+    except Exception:
+        return np.zeros((0, 3), dtype=np.float32)
+
+    seq_parts = []
+    for stroke in strokes:
+        if not isinstance(stroke, (list, tuple)) or len(stroke) != 2:
+            continue
+        x, y = stroke
+        n = min(len(x), len(y))
+        if n < 2:
+            continue
+        x = np.asarray(x[:n], dtype=np.int16)
+        y = np.asarray(y[:n], dtype=np.int16)
+
+        dx = np.diff(x).astype(np.float32) / 255.0
+        dy = np.diff(y).astype(np.float32) / 255.0
+        if dx.size == 0:
+            continue
+        pen = np.zeros_like(dx, dtype=np.float32)
+        pen[-1] = 1.0  # mark end-of-stroke
+
+        seq_parts.append(np.stack([dx, dy, pen], axis=1))
+
+    if not seq_parts:
+        return np.zeros((0, 3), dtype=np.float32)
+
+    seq = np.concatenate(seq_parts, axis=0)
+    # Optional: clip extreme deltas for robustness
+    seq[:, :2] = np.clip(seq[:, :2], -1.0, 1.0)
+    return seq.astype(np.float32)
+
+"""
+Section 3: Prepare the data set for training. How to read one doodle and how to bundle them into batches.
+"""
+class SketchDataset(Dataset):
+    def __init__(self, frame: pd.DataFrame, class_to_idx: dict, max_len: int, min_seq_len: int = 6):
+        self.frame = frame.reset_index(drop=True)
+        self.class_to_idx = class_to_idx
+        self.max_len = max_len
+        self.min_seq_len = min_seq_len
+
+        # Keep only rows with enough sequence length
+        valid_indices = []
+        for i, s in enumerate(self.frame["drawing"].values):
+            # fast length check without full array build:
+            try:
+                strokes = ast.literal_eval(s)
+                length = 0
+                for st in strokes:
+                    x = st[0]
+                    length += max(0, len(x) - 1)
+                if length >= self.min_seq_len:
+                    valid_indices.append(i)
+            except Exception:
+                pass
+
+        if len(valid_indices) < len(self.frame):
+            self.frame = self.frame.iloc[valid_indices].reset_index(drop=True)
+
+    def __len__(self):
+        return len(self.frame)
+
+    def __getitem__(self, idx: int):
+        row = self.frame.iloc[idx]
+        seq = parse_drawing_to_seq(row["drawing"])
+        label = self.class_to_idx[row["word"]]
+        return seq, label
+
+
+def collate_pad(batch: List[Tuple[np.ndarray, int]], max_len: int):
+    # batch: list of (seq_np[T,3], label_int)
+    sequences, labels = zip(*batch)
+    lengths = [min(s.shape[0], max_len) for s in sequences]
+    if len(lengths) == 0:
+        raise RuntimeError("Empty batch encountered.")
+
+    maxL = max(1, min(max(lengths), max_len))
+    B = len(sequences)
+    x = torch.zeros((B, maxL, 3), dtype=torch.float32)
+    for i, s in enumerate(sequences):
+        L = min(s.shape[0], maxL)
+        if L > 0:
+            x[i, :L, :] = torch.from_numpy(s[:L, :])
+    y = torch.tensor(labels, dtype=torch.long)
+    lens = torch.tensor([min(l, maxL) for l in lengths], dtype=torch.long)
+    return x, lens, y
+
+
+class CollatePad:
+    """Top-level callable collate for multiprocessing pickling safety.
+
+    Avoids lambda/nested functions which break with num_workers>0 on macOS/Windows.
+    """
+    def __init__(self, max_len: int):
+        self.max_len = max_len
+
+    def __call__(self, batch: List[Tuple[np.ndarray, int]]):
+        return collate_pad(batch, self.max_len)
+
+"""
+Section 4: Gru classifier. It reads the sequence, form a memeory of the shape and then map the memory to a label
+"""
+class GRUClassifier(nn.Module):
+    def __init__(self, input_size: int, hidden_size: int, num_layers: int,
+                 bidirectional: bool, dropout: float, num_classes: int, use_packing: bool = True):
+        super().__init__()
+        self.use_packing = use_packing
+        self.gru = nn.GRU(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            bidirectional=bidirectional,
+            dropout=dropout if num_layers > 1 else 0.0,
+        )
+        out_dim = hidden_size * (2 if bidirectional else 1)
+        self.norm = nn.LayerNorm(out_dim)
+        self.fc = nn.Linear(out_dim, num_classes)
+
+    def forward(self, x: torch.Tensor, lengths: torch.Tensor):
+        # x: [B, T, 3], lengths: [B]
+        if self.use_packing:
+            packed = nn.utils.rnn.pack_padded_sequence(
+                x, lengths.cpu(), batch_first=True, enforce_sorted=False
+            )
+            _, h_n = self.gru(packed)
+        else:
+            _, h_n = self.gru(x)
+
+        # h_n: [num_layers * num_directions, B, hidden_size]
+        if self.gru.bidirectional:
+            # last layer, both directions
+            h = torch.cat([h_n[-2], h_n[-1]], dim=1)
+        else:
+            h = h_n[-1]
+
+        h = self.norm(h)
+        logits = self.fc(h)
+        return logits
+
+"""
+Section 5: Accuracy, training, evaluation and early stopping
+"""
+def topk_accuracy(logits: torch.Tensor, targets: torch.Tensor, ks=(1, 3)):
+    maxk = max(ks)
+    with torch.no_grad():
+        _, pred = logits.topk(maxk, dim=1)
+        pred = pred.t()  # [maxk, B]
+        correct = pred.eq(targets.view(1, -1).expand_as(pred))
+        res = []
+        for k in ks:
+            correct_k = correct[:k].reshape(-1).float().sum(0)
+            res.append((correct_k / targets.size(0)).item())
+        return res
+
+
+def train_one_epoch(model, loader, optimizer, device, grad_clip=1.0, label_smoothing=0.05):
+    model.train()
+    criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+    total_loss, total_correct, total_count = 0.0, 0, 0
+    total_top3 = 0.0
+
+    for x, lengths, y in loader:
+        x = x.to(device)
+        y = y.to(device)
+        lengths = lengths.to(device)
+
+        optimizer.zero_grad(set_to_none=True)
+        logits = model(x, lengths)
+        loss = criterion(logits, y)
+        loss.backward()
+        if grad_clip is not None and grad_clip > 0:
+            nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+        optimizer.step()
+
+        with torch.no_grad():
+            acc1, acc3 = topk_accuracy(logits, y, ks=(1, 3))
+        total_loss += loss.item() * y.size(0)
+        total_correct += acc1 * y.size(0)
+        total_top3 += acc3 * y.size(0)
+        total_count += y.size(0)
+
+    return {
+        "loss": total_loss / total_count,
+        "acc1": total_correct / total_count,
+        "acc3": total_top3 / total_count,
+    }
+
+
+@torch.no_grad()
+def evaluate(model, loader, device, label_smoothing=0.0):
+    model.eval()
+    criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+    total_loss, total_correct, total_count = 0.0, 0, 0
+    total_top3 = 0.0
+
+    for x, lengths, y in loader:
+        x = x.to(device)
+        y = y.to(device)
+        lengths = lengths.to(device)
+
+        logits = model(x, lengths)
+        loss = criterion(logits, y)
+
+        acc1, acc3 = topk_accuracy(logits, y, ks=(1, 3))
+        total_loss += loss.item() * y.size(0)
+        total_correct += acc1 * y.size(0)
+        total_top3 += acc3 * y.size(0)
+        total_count += y.size(0)
+
+    return {
+        "loss": total_loss / total_count,
+        "acc1": total_correct / total_count,
+        "acc3": total_top3 / total_count,
+    }
+
+"""
+Section 6: Build splits, DataLoaders, model, and training driver
+"""
+
+def build_frame_and_classes(cfg: Config) -> Tuple[pd.DataFrame, List[str]]:
+    df = pd.read_csv(cfg.csv_path)
+    if cfg.recognized_only and "recognized" in df.columns:
+        df = df[df["recognized"] == True].reset_index(drop=True)
+
+    # Only keep rows with 'word' and 'drawing'
+    df = df[["word", "drawing"]].dropna().reset_index(drop=True)
+
+    # Determine classes from the CSV content (unique animal labels)
+    classes = sorted(df["word"].unique().tolist())
+
+    return df, classes
+
+
+def stratify_and_cap(df: pd.DataFrame, classes: List[str], cfg: Config):
+    # Cap per class for faster training (optional)
+    if cfg.per_class_limit is not None and cfg.per_class_limit > 0:
+        parts = []
+        for c in classes:
+            sub = df[df["word"] == c]
+            if len(sub) > cfg.per_class_limit:
+                sub = sub.sample(cfg.per_class_limit, random_state=42)
+            parts.append(sub)
+        df = pd.concat(parts, axis=0).reset_index(drop=True)
+
+    # Stratified split by label
+    train_df, val_df = train_test_split(
+        df, test_size=cfg.test_size, random_state=42, stratify=df["word"]
+    )
+
+    return train_df.reset_index(drop=True), val_df.reset_index(drop=True)
+
+
+def make_loaders(train_df, val_df, classes, cfg: Config):
+    class_to_idx = {c: i for i, c in enumerate(classes)}
+    train_ds = SketchDataset(train_df, class_to_idx, max_len=cfg.max_len, min_seq_len=cfg.min_seq_len)
+    val_ds = SketchDataset(val_df, class_to_idx, max_len=cfg.max_len, min_seq_len=cfg.min_seq_len)
+    collator = CollatePad(cfg.max_len)
+
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=cfg.batch_size,
+        shuffle=True,
+        num_workers=cfg.num_workers,
+        collate_fn=collator,
+        drop_last=False,
+        persistent_workers=False,
+    )
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=cfg.batch_size,
+        shuffle=False,
+        num_workers=cfg.num_workers,
+        collate_fn=collator,
+        drop_last=False,
+        persistent_workers=False,
+    )
+
+    return train_loader, val_loader, class_to_idx
+
+
+def save_checkpoint(model, class_to_idx, cfg: Config, metrics: dict, fname: str = "rnn_animals.pt"):
+    out_dir = Path(cfg.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / fname
+    payload = {
+        "model_state": model.state_dict(),
+        "class_to_idx": class_to_idx,
+        "config": cfg.__dict__,
+        "metrics": metrics,
+    }
+    torch.save(payload, str(path))
+    return str(path)
+
+
+def run_training(cfg: Config):
+    device = get_device()
+    set_seed(42)
+
+    print(f"Using device: {device}")
+    df, classes = build_frame_and_classes(cfg)
+    print(f"Classes ({len(classes)}): {classes}")
+
+    train_df, val_df = stratify_and_cap(df, classes, cfg)
+    print(f"Train samples: {len(train_df)}, Val samples: {len(val_df)}")
+
+    train_loader, val_loader, class_to_idx = make_loaders(train_df, val_df, classes, cfg)
+
+    model = GRUClassifier(
+        input_size=cfg.input_size,
+        hidden_size=cfg.hidden_size,
+        num_layers=cfg.num_layers,
+        bidirectional=cfg.bidirectional,
+        dropout=cfg.dropout,
+        num_classes=len(classes),
+        use_packing=cfg.use_packing,
+    ).to(device)
+
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay
+    )
+    # Some Torch builds do not accept 'verbose' in ReduceLROnPlateau; omit it for compatibility
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=2
+    )
+
+    def _get_lr(opt: torch.optim.Optimizer) -> float:
+        for pg in opt.param_groups:
+            return float(pg.get("lr", 0.0))
+        return 0.0
+    prev_lr = _get_lr(optimizer)
+
+    best_val_loss = float("inf")
+    best_metrics = None
+    patience_left = cfg.patience
+
+    for epoch in range(1, cfg.epochs + 1):
+        t0 = time.time()
+        train_metrics = train_one_epoch(
+            model, train_loader, optimizer, device,
+            grad_clip=cfg.grad_clip, label_smoothing=cfg.label_smoothing
+        )
+        val_metrics = evaluate(
+            model, val_loader, device, label_smoothing=0.0
+        )
+        scheduler.step(val_metrics["loss"])
+        # Log when LR changes (since 'verbose' may be unsupported in some torch builds)
+        curr_lr = _get_lr(optimizer)
+        if curr_lr != prev_lr:
+            print(f"LR reduced: {prev_lr:.6g} -> {curr_lr:.6g}")
+            prev_lr = curr_lr
+        dt = time.time() - t0
+
+        print(
+            f"Epoch {epoch:02d} | "
+            f"train_loss={train_metrics['loss']:.4f} "
+            f"train_acc1={train_metrics['acc1']:.3f} "
+            f"val_loss={val_metrics['loss']:.4f} "
+            f"val_acc1={val_metrics['acc1']:.3f} "
+            f"val_acc3={val_metrics['acc3']:.3f} "
+            f"| {dt:.1f}s"
+        )
+
+        if val_metrics["loss"] < best_val_loss:
+            best_val_loss = val_metrics["loss"]
+            best_metrics = {"epoch": epoch, **val_metrics}
+            save_checkpoint(model, class_to_idx, cfg, best_metrics, fname="rnn_animals_best.pt")
+            patience_left = cfg.patience
+        else:
+            patience_left -= 1
+            if patience_left <= 0:
+                print("Early stopping triggered.")
+                break
+
+    # Save final model as well (last epoch)
+    final_path = save_checkpoint(model, class_to_idx, cfg, best_metrics or {}, fname="rnn_animals_last.pt")
+    print(f"Saved model to: {final_path}")
+
+
+if __name__ == "__main__":
+    cfg = Config()
+    run_training(cfg)

@@ -1,11 +1,10 @@
 # Digit classification Neural Networks from scratch
 
-Neural Networks are the foundation of modern machine learning so I wanted to build and push my understanding of Neural Networks by building them from scratch (no libraries except NumPy). 
+Neural Networks are the foundation of modern machine learning, thus understanding the main concepts like MLP, CNN and RNN are vital. In this repo I aim to guide through all of the main with simple and easy to follow examples to then put your own model into production. 
 
+Who this repo is for: Have some prior knowledge of the theory and looking for simple ways to get hands on with projects
 
-My goal was to build a simple MLP classification for digits 0-9, then push my understanding by implementing a CNN for classifying digits 00-99 while explaining every step and getting the model into production.
-
-## Mutli-Layered Perceptron: Handwritten 0-9 digits classification
+## 1. Mutli-Layered Perceptron: Handwritten 0-9 digits classification
 <p align="center">
   <a href="https://www.youtube.com/watch?v=RzZ32FRI4nI">
     <img src="https://img.youtube.com/vi/RzZ32FRI4nI/hqdefault.jpg" width="300" />
@@ -26,7 +25,7 @@ For detailed implementation and results, see the [MNIST README](MNIST/README.md)
 
 
 
-## Convolutional Neural Network: Handwritten 0-99  digits classification (MNIST-100)
+## 2. Convolutional Neural Network: Handwritten 0-99  digits classification (MNIST-100)
 [Try the CNN here]()
 
 #### Simple explanation:
@@ -38,7 +37,7 @@ For detailed implementation and results, see the [MNIST README](MNIST/README.md)
 For detailed implementation, explanation and results see the [MNSIT-100 README](MNIST-100/README.md)
 
 
-## Recurrent Neural Network: Hand drawn doodles classification.
+## 3. Recurrent Neural Network: Hand drawn doodles classification.
 [Try the RNN here]()
 
 #### Simple explanation
