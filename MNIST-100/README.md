@@ -1,6 +1,8 @@
 # MNIST-100 Production Pipeline
 
 **Goal**: Scale the MLP approach to recognizing two-digit numbers.
+**input data:** MNIST-100 28*56 pixel images of handwritten digits 0-99 (60k train / 10k test grayscale digits).
+
 
 ## Demo: 
 
@@ -9,10 +11,23 @@
 
 
 ### 1st itreation
-This directory extends the original MNIST project to recognize **two-digit numbers (00–99)**. Images are (28 × 56) grayscale pairs of MNIST digits stored in `archive/mnist_compressed.npz`.
+Wanted to try to implement the MLP with this new data but with some changes to handle the new input data. I got 99% on train and 87% on dev.
 
-The stack is still pure NumPy: a 3-layer MLP with He init, ReLU activations, dropout, Adam, early stopping, and lightweight data augmentation.
 
+<p align="center">
+  <img src="assets/loss_curve.png" alt="Loss curve" width="420"/>
+  <br/>
+  <em>Training loss over epochs</em>
+  <br/><br/>
+  <img src="assets/accuracy_curves.png" alt="Accuracy curves" width="420"/>
+  <br/>
+  <em>Train vs Dev accuracy — note widening gap</em>
+  <br/><br/>
+  <img src="assets/generalization_gap.png" alt="Generalization gap" width="420"/>
+  <br/>
+  <em>Generalization gap (train − dev), highlighting overfitting</em>
+  <br/>
+</p>
 
 
 ---

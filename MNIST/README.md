@@ -1,6 +1,7 @@
 # Building a Multi-Layered Perceptron to production-ready digit classifier
 
 **Goal:** Build a MLP to be able to predict hand drawn digits from 0-9
+**input data:** MNIST 28*28 pixel images of handwritten digits 0-9 (60k train / 10k test grayscale digits).
 
 ## Demo: 
 Try it for yourself: https://huggingface.co/spaces/Eli181927/elliot_digit_classifier
