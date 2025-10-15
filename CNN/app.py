@@ -1,5 +1,7 @@
+import os
 import numpy as np
 import gradio as gr
+import gradio.routes as gr_routes
 from PIL import Image, ImageOps
 from pathlib import Path
 import importlib.util
@@ -597,4 +599,14 @@ with gr.Blocks() as demo:
 
 
 if __name__ == "__main__":
-    demo.launch(server_name="127.0.0.1", share=True)
+    space_env = os.getenv("SPACE_ID")
+    if space_env:
+        demo.launch(show_api=False)
+    else:
+        demo.launch(server_name="0.0.0.0", share=True, show_api=False)
+def _disable_gradio_api_schema(*_args, **_kwargs):
+    """Work around Gradio schema bug on Python 3.13 by returning empty metadata."""
+    return {}
+
+
+gr_routes.api_info = _disable_gradio_api_schema
