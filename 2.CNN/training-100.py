@@ -1,3 +1,7 @@
+"""
+Section 1: Imports and network configurations
+"""
+
 from __future__ import annotations
 
 import numpy as np
@@ -69,7 +73,9 @@ def save_sweep_summary(results, filepath, *, include_trial=False):
                 row["trial"] = int(entry["trial"])
             writer.writerow(row)
 
-
+"""
+Section 2: Loads the input data, transposes (so arrays are feature x samples) and normalises it (scales features to 0-1)
+"""
 def load_data(path: Path, dev_size: int = DEV_SIZE):
     """
     Load the MNIST-100 dataset from the compressed archive and return
@@ -105,6 +111,9 @@ def load_data(path: Path, dev_size: int = DEV_SIZE):
     return X_train, Y_train, X_dev, Y_dev, X_test, test_labels
 
 
+"""
+Section 3: Normalises the features [(0, 255)] to [(0, 1)]
+"""
 def normalize_features(X_train, X_dev):
     """
     Normalize features to zero mean and unit variance using the training set.
@@ -121,6 +130,9 @@ def normalize_features(X_train, X_dev):
     return X_train, X_dev, mean, std
 
 
+"""
+Section 4: Initialises the parameters (layers, weights and biases) and adam optimizer
+"""
 def init_params():
     params = {}
     conv1_fan_in = IMAGE_CHANNELS * KERNEL_SIZE * KERNEL_SIZE
@@ -163,6 +175,9 @@ def init_adam(params):
     return v, s
 
 
+"""
+Section 5: ReLu activation function and backward ReLu function
+"""
 def relu(Z):
     return np.maximum(0.0, Z)
 
@@ -171,6 +186,9 @@ def relu_backward(Z):
     return (Z > 0).astype(np.float32)
 
 
+"""
+Section 6: Reshapes the flattened input to 4D tensors (batch, channels, height, width) for the convolutional layers
+"""
 def reshape_flat_to_images(X: np.ndarray, *, batch_size: int | None = None):
     """
     Convert flattened columns (features, batch) into 4D tensors (batch, channels, height, width).
@@ -181,6 +199,10 @@ def reshape_flat_to_images(X: np.ndarray, *, batch_size: int | None = None):
     images = X.T.reshape(m, IMAGE_HEIGHT, IMAGE_WIDTH)
     return images[:, None, :, :]  # add channel dim
 
+
+"""
+Section 7: Convolutional layer forward pass and backward pass
+"""
 
 def im2col(X, kernel_h, kernel_w, stride, padding):
     X_padded = np.pad(
@@ -268,6 +290,10 @@ def conv_backward(dout, cache):
     return dX, dW, db
 
 
+
+"""
+Section 8: Max pooling layer forward pass and backward pass
+"""
 def maxpool_forward(X, *, pool_size: int = 2, stride: int = 2):
     batch_size, channels, height, width = X.shape
     out_height = (height - pool_size) // stride + 1
@@ -329,6 +355,10 @@ def one_hot(Y, num_classes=OUTPUT_DIM):
     return one_hot_y
 
 
+
+"""
+Section 9: Forward propagation and comptutes for loss
+"""
 def forward_prop(
     X,
     params,
@@ -397,6 +427,9 @@ def compute_loss(probs, Y_batch, params, reg_lambda):
     return data_loss + l2_loss
 
 
+"""
+Section 10: Back propagation for the CNN model
+"""
 def back_prop(cache, Y_batch, params, reg_lambda, dropout_rate):
     m = Y_batch.shape[1]
     grads = {}
@@ -438,6 +471,10 @@ def back_prop(cache, Y_batch, params, reg_lambda, dropout_rate):
     return grads
 
 
+"""
+Section 11: Updates the parameters using the adam optimizer
+"""
+
 def update_params_adam(params, grads, v, s, t, learning_rate):
     updated_params = {}
     for key in params:
@@ -460,6 +497,10 @@ def get_accuracy(probs, labels):
     predictions = get_predictions(probs)
     return np.mean(predictions == labels)
 
+
+"""
+Section 12: Augments the batch with horizontal shifts and contrast/brightness jitter
+"""
 
 def augment_batch(
     X_batch,
@@ -500,6 +541,9 @@ def augment_batch(
     return images.reshape(batch_size, -1).T
 
 
+"""
+Section 13: Trains the model + evaluates the model
+"""
 def train_model(
     X_train,
     Y_train,
@@ -599,6 +643,9 @@ def evaluate(params, X, Y):
     return predictions, accuracy
 
 
+"""
+Section 14: Trains the model once
+"""
 def train_once(
     learning_rate: float,
     reg_lambda: float,
@@ -633,6 +680,9 @@ def train_once(
 
     return params, dev_accuracy, mean, std, history
 
+"""
+Section 15: Hyperparameter sweep for learning rate, regularization and dropout rate
+"""
 
 def lr_sweep(
     learning_rates: list[float],
@@ -805,6 +855,9 @@ def auto_train_pipeline(
     }
 
 
+"""
+Section 16: Saves the model
+"""
 def save_model(params, mean, std, filepath=None):
     target_path = Path(filepath) if filepath is not None else ARCHIVE_DIR / "trained_model_mnist100.npz"
     target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -812,6 +865,10 @@ def save_model(params, mean, std, filepath=None):
     np.savez(target_path, **params, mean=mean, std=std)
     print("Model saved successfully!")
 
+
+"""
+Section 17: Main function
+"""
 
 def main():
     parser = argparse.ArgumentParser(description="MNIST-100 training and tuning utilities.")
