@@ -36,7 +36,9 @@ For detailed implementation, explanation and results see the [CNN README](2.CNN/
 
 #### Simple explanation
 
-
+- **Goal** – Classify hand-drawn doodles into 10 animal classes.
+- **Dataset** – Google Quick, Draw! stroke sequences (dx, dy, pen-lift).
+- **Implementation** – 2-layer bidirectional GRU with sequence packing, AdamW, dropout, label smoothing, and grad clipping.
+- **Result** – Around 91% top-1 validation accuracy (≈98.6% top-3).
 
 For detailed implementation and results, see the [RNN README](3.RNN/README.md)
-
