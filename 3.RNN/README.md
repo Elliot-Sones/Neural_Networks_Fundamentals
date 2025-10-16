@@ -1,7 +1,42 @@
 #Doodle classificiation with RNN
+**Goal:** Use Reccurent Neural Network to accurately predict doodles 
+**input data:** Quick Draw doodles.
 
-[Very simple to follow explanation of RNN](https://www.youtube.com/watch?v=AsNTP8Kwu80) 
+#### [Try out the demo for yourself](https://huggingface.co/spaces/Eli181927/animal_doodle_classifier)
 
+## Recurrent Neural Networks
+[Simple to follow explanation of RNN](https://www.youtube.com/watch?v=AsNTP8Kwu80) 
+
+A **Recurrent Neural Network** is a neural network trained an sequential data (like text, time series or speech) to be able to make sequence based predictions.  
+
+<img src="assets/RNN.jpeg" alt="RNN" width="420"/>
+
+
+They are able to do this by maintaining a **hidden state** (H) which acts like memory of the past inputs. After each new input, the RNN updates his hidden state on both the current inout and previous hidden state, allowing it to retain information over time.
+
+<img src="assets/hiddenstate.svg" alt="hidden state" width="420"/>
+
+Although, as you might of realised, the repeated updates tend to shrink the gradients (called the vanishing gradient problem), causing the network to forget long-term dependencies.
+
+More advanced architechtures like Long Short-Term Memory (LSTM) and Gated  Recurret Unit (GRU) use gates to control the flow of the information allowing them to perserve important patterns.
+
+<img src="assets/compare.png" alt="compare" width="420"/>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## My process
 
 ## Iteration 1: training only on animals
 - Data: only 10 animals

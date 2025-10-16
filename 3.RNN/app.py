@@ -9,7 +9,12 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw
 
-APP_VERSION = "rnn-app v0.3 (seq-cap + gain=0.04)"
+APP_VERSION = "rnn-app v0.4 (full-canvas + fixed-res preprocess)"
+# Visual canvas size (pixels). Large for near full-screen.
+DISPLAY_CANVAS_SIZE = 1024
+# Internal working resolution for vectorization to keep accuracy stable
+# regardless of display size and to bound compute.
+WORK_RES = 800
 
 """RNN demo app.
 
@@ -315,6 +320,26 @@ def _raster_to_quickdraw_strokes(img_input: Any) -> List[List[List[int]]]:
     else:
         return []
 
+    # Resize and pad to fixed working resolution (square) for stable behavior
+    # independent of the displayed canvas size.
+    def _resize_square(im: Image.Image, size: int) -> Image.Image:
+        if im.width == size and im.height == size:
+            return im
+        # ensure RGB/L modes
+        if im.mode not in ("RGB", "L"):
+            im = im.convert("RGB")
+        scale = min(size / max(1, im.width), size / max(1, im.height))
+        new_w = max(1, int(round(im.width * scale)))
+        new_h = max(1, int(round(im.height * scale)))
+        im_resized = im.resize((new_w, new_h), Image.BILINEAR)
+        bg_mode = "RGB" if im_resized.mode != "L" else "L"
+        canvas = Image.new(bg_mode, (size, size), color=(255 if bg_mode == "L" else (255, 255, 255)))
+        off_x = (size - new_w) // 2
+        off_y = (size - new_h) // 2
+        canvas.paste(im_resized, (off_x, off_y))
+        return canvas
+
+    img = _resize_square(img, WORK_RES)
     gray = _np.array(img.convert("L"), dtype=_np.uint8)
     H, W = gray.shape
     if H == 0 or W == 0:
@@ -633,8 +658,15 @@ def build_ui() -> gr.Blocks:
         """)
         gr.Markdown(f"Build: {APP_VERSION}")
 
-        # Use built-in Sketchpad as the default canvas
-        input_component = gr.Sketchpad(label="Draw here", brush=8, type="numpy", width=512, height=512)
+        # Use built-in Sketchpad as the default canvas (large display size).
+        # Internal processing always rescales to WORK_RES, so accuracy is unchanged.
+        input_component = gr.Sketchpad(
+            label="Draw here",
+            brush=8,
+            type="numpy",
+            width=DISPLAY_CANVAS_SIZE,
+            height=DISPLAY_CANVAS_SIZE,
+        )
         # Optional JSON input as an advanced alternative
         json_input = gr.Textbox(
             label="QuickDraw strokes JSON (optional)",
