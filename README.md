@@ -5,12 +5,6 @@ Neural Networks are the foundation of modern machine learning, thus understandin
 Who this repo is for: Have some prior knowledge of the theory and looking for simple ways to get hands on with projects
 
 ## 1. Mutli-Layered Perceptron: Handwritten 0-9 digits classification
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=RzZ32FRI4nI">
-    <img src="https://img.youtube.com/vi/RzZ32FRI4nI/hqdefault.jpg" width="300" />
-  </a>
-</p>
-
 [Try the MLP here](https://huggingface.co/spaces/Eli181927/elliot_digit_classifier/)
 
 #### Simple explanation:
@@ -45,3 +39,5 @@ For detailed implementation, explanation and results see the [CNN README](2.CNN/
 
 
 For detailed implementation and results, see the [RNN README](3.RNN/README.md)
+# Digit classification Neural Networks from scratch
+

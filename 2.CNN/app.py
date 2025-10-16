@@ -562,7 +562,12 @@ with gr.Blocks() as demo:
 
         with gr.Column(scale=1):
             pred_box = gr.Number(label="Predicted Number", precision=0, value=None)
-            prob_table = gr.Dataframe(label="Class Probabilities", interactive=False)
+            prob_table = gr.Dataframe(
+                label="Class Probabilities",
+                headers=["class", "prob"],
+                datatype=["str", "number"],
+                interactive=False,
+            )
             preview = gr.Image(label="Model Input Preview (28x56)", image_mode="L")
             mean_diff_view = gr.Image(label="Difference vs Training Mean", image_mode="L")
             diagnostics_box = gr.Code(label="Diagnostics (JSON)", language="json")
