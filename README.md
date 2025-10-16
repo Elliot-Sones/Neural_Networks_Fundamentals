@@ -1,4 +1,4 @@
-# Digit classification Neural Networks from scratch
+# Classification Neural Networks from scratch
 
 Neural Networks are the foundation of modern machine learning, thus understanding the main concepts like MLP, CNN and RNN are vital. In this repo I aim to guide through all of the main with simple and easy to follow examples to then put your own model into production. 
 
@@ -20,7 +20,7 @@ For detailed implementation and results, see the [MLP README](1.MLP/README.md).
 
 
 ## 2. Convolutional Neural Network: Handwritten 0-99  digits classification (MNIST-100)
-[Try the CNN here]()
+[Try the CNN here](https://huggingface.co/spaces/Eli181927/0-99_Classification)
 
 #### Simple explanation:
 - **Goal** – Scale the scratch-built approach to recognizing two-digit numbers.
@@ -39,5 +39,4 @@ For detailed implementation, explanation and results see the [CNN README](2.CNN/
 
 
 For detailed implementation and results, see the [RNN README](3.RNN/README.md)
-# Digit classification Neural Networks from scratch
 

@@ -7,7 +7,7 @@
 
 
 ## Demo: 
-[Try it out for yourself]()
+[Try it out for yourself](https://huggingface.co/spaces/Eli181927/0-99_Classification)
 
 
 
@@ -47,7 +47,7 @@ I first implemented the MLP from the precious step:
 - **Two-digit layout**: wider 28×56 inputs benefit from spatial feature extractors that can independently capture left/right digits and their spacing.
 
 ### Implementing CNN
-- **Data & normalization**: paired MNIST 28×56 grayscale (labels 00–99). Scale to [0,1], then standardize each feature with the training-set mean/std (persisted for test-time use).
+- **Data & normalization**: paired MNIST 28×56 grayscale (labels 00–99). Scale to [0,1], then standardize each feature with the training-set mean/std (persisted for test-time use). 
 - **Augmentation (lightweight)**: random horizontal shifts up to ±2 px and mild contrast/brightness jitter (σ=0.1) per mini-batch to handle stroke thickness and spacing variance.
 - **Architecture**: Conv(3×3,16) → ReLU → MaxPool(2×2) → Conv(3×3,32) → ReLU → MaxPool(2×2) → Flatten → FC(256) → ReLU → Dropout(p=0.4) → FC(100) → Softmax.
 - **Optimization**: Adam (lr=1e-3, β1=0.9, β2=0.999, ε=1e-8), He initialization, L2 regularization (λ=1e-4), batch size 256, up to 20 epochs.
