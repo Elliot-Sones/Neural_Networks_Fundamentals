@@ -12,19 +12,19 @@ A **Recurrent Neural Network** is a neural network trained on sequential data (l
 <img src="assets/RNN.png" alt="RNN" width="420"/>
 
 
-They are able to do this by maintaining a **hidden state** which acts like memory of past inputs. After each new input, the RNN updates its hidden state based on both the current input and the previous hidden state, allowing it to retain information over time.
+They are able to do this by maintaining a **hidden state** which acts like a memory of past inputs. After each new input, the RNN updates its hidden state based on both the current input and the previous hidden state, allowing it to retain information over time.
 
 <img src="assets/hiddenstate.svg" alt="hidden state" width="420"/>
 
-At each step, the weights $W_x$ and $W_h$ are applied to the current input $x_t$ and the previous hidden state $h_{t-1}$, together with the bias $b$, to compute the new hidden state and apply an activation such as $\tanh$.
+At each time step, the weights ($W_x$ and $W_h$) are applied to the current input ($x_t$) and the previous hidden state ($h_{t-1}$), combined with the bias ($b$), and passed through an activation function (e.g., $\tanh$) to compute the new hidden state.
 
-At each step, the update is:
+At each step:
 
 $$
 h_t = \tanh\left(W_x x_t + W_h h_{t-1} + b\right)
 $$
 
-However, repeated multiplication by small weights causes gradients to shrink exponentially during training—the **vanishing gradient problem**—which makes the network forget long‑term dependencies.
+However, repeated multiplication by small weights causes gradients to shrink exponentially during training-the **vanishing gradient problem**—which makes the network forget long‑term dependencies.
 
 More advanced architectures such as Long Short-Term Memory (LSTM) and Gated Recurrent Unit (GRU) use gates to control the flow of information—deciding what to keep, forget, or add at each step. This preserves important information over long sequences by creating a more stable gradient flow. 
 
