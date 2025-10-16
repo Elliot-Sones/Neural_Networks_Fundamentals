@@ -24,9 +24,9 @@ $$
 h_t = \tanh\left(W_x x_t + W_h h_{t-1} + b\right)
 $$
 
-However, repeated multiplication by small weights causes gradients to shrink exponentially during training-the **vanishing gradient problem**—which makes the network forget long‑term dependencies.
+However, repeated multiplications by small weights causes gradients to shrink exponentially (called the **vanishing gradient problem**) during training, which makes the network forget long‑term dependencies.
 
-More advanced architectures such as Long Short-Term Memory (LSTM) and Gated Recurrent Unit (GRU) use gates to control the flow of information—deciding what to keep, forget, or add at each step. This preserves important information over long sequences by creating a more stable gradient flow. 
+More advanced architectures such as Long Short-Term Memory (LSTM) and Gated Recurrent Unit (GRU), use gates to control the flow of information, deciding what to keep, forget, or add at each step. This preserves important information over long sequences by creating a more stable gradient flow. 
 
 
 <img src="assets/compare.png" alt="compare" width="420"/>
