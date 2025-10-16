@@ -1,7 +1,5 @@
 # Convolutional Neural Network -> 0-99 digit classifier
 
-[Simple explanation of CNN](https://www.youtube.com/watch?v=QzY57FaENXg)
-
 **Goal**: Scale the MLP approach to recognizing two-digit numbers.
 **input data:** MNIST-100 28*56 pixel images of handwritten digits 0-99 (60k train / 10k test grayscale digits).
 
@@ -10,7 +8,29 @@
 [Try it out for yourself](https://huggingface.co/spaces/Eli181927/0-99_Classification)
 
 
+## Convolutional Neural Networks
+[Simple explanation of CNN](https://www.youtube.com/watch?v=QzY57FaENXg) [or this one](https://www.youtube.com/watch?v=YRhxdVk_sIs)
 
+CNN's are different than MLP because they have **convolutional layers** desgined recognise spacial patterns in data such as images.
+
+The **convolutional layers** are able to learn to detect patterns (like edges or textures) in an image using small (usually 3x3) filters (or kernels). 
+
+**Filters** slides across the image, and builds a feature map to recognise where certain visual patterns occur.
+
+After that, **pooling** layers (usually MaxPool) is then used to reduse the spacial dimensions to keep only the strongst signals from these feature maps and throws away the rest. This makes the network more efficient and less sensitive the noise.
+
+Between these layers, **activation functions** (ReLU, GELU etc) help decide whether the pattern actually matters.
+
+After all the spacial information you need has been extracted, the data is then flattened (from 3D feature map into a 1D vecotr) so it can be apssed into a fully connected layer, just like in an MLP.
+
+This is the gist of the Convolutional Neural Networks. These networks are thus able to build increasingly complex representations of the image through deeper layers going from simplw edge recognition to eye or hair recognition in a image.
+
+
+
+
+
+
+# My process
 
 ### MLP test
 I first implemented the MLP from the precious step: 

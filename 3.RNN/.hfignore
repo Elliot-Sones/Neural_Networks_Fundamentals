@@ -1,0 +1,11 @@
+# Exclude large training data and caches when deploying only the 3.RNN folder as a Space
+archive/master_doodle_dataframe.csv
+archive/seq_cache_v1/
+archive/plots/
+*.npy
+*.npz
+!archive/rnn_animals_best.pt
+
+# VCS noise
+.git/
+.gitignore

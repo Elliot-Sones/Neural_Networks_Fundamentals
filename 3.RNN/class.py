@@ -1,72 +1,74 @@
-import pandas as pd
-import kagglehub
-from kagglehub import KaggleDatasetAdapter
+from pathlib import Path
+from typing import List
 
-animals = [
-    "ant",
-    "bear",
-    "bee",
-    "bird",
+import pandas as pd
+from sklearn.model_selection import train_test_split
+
+# Ten target animal classes
+animals: List[str] = [
     "butterfly",
-    "camel",
-    "cat",
     "cow",
-    "crab",
-    "crocodile",
-    "dog",
-    "dolphin",
-    "duck",
     "elephant",
-    "flamingo",
-    "frog",
     "giraffe",
-    "hedgehog",
-    "horse",
-    "kangaroo",
-    "lion",
-    "lobster",
     "monkey",
-    "mosquito",
-    "mouse",
     "octopus",
-    "owl",
-    "panda",
-    "parrot",
-    "penguin",
-    "pig",
-    "rabbit",
-    "raccoon",
-    "rhinoceros",
     "scorpion",
-    "sea turtle",
     "shark",
-    "sheep",
-    "snail",
     "snake",
     "spider",
-    "squirrel",
-    "swan",
-    "tiger",
-    "whale",
-    "zebra",
 ]
 
-df = kagglehub.load_dataset(
-    KaggleDatasetAdapter.PANDAS,
-    "ashishjangra27/doodle-dataset",
-    "master_doodle_dataframe.csv",
-)
+archive_dir = Path(__file__).resolve().parent / "archive"
+archive_dir.mkdir(parents=True, exist_ok=True)
+local_master = archive_dir / "master_doodle_dataframe.csv"
 
-counts = df["word"].value_counts()
-missing_animals = [animal for animal in animals if animal not in counts]
+if not local_master.exists():
+    raise FileNotFoundError(
+        f"Expected local dataset at {local_master}. Please place the master CSV there."
+    )
 
-if missing_animals:
-    print("Missing classes with no samples:", missing_animals)
-else:
-    print("All requested animals have samples available.")
+print(f"Loading master dataset from: {local_master}")
+df = pd.read_csv(local_master)
 
-df_animals = df[df["word"].isin(animals)].reset_index(drop=True)
+# Keep only required columns
+needed_cols = [c for c in ["word", "drawing", "recognized"] if c in df.columns]
+df = df[needed_cols].dropna(subset=["word", "drawing"]).reset_index(drop=True)
+
+# Filter to requested animals (intersection only)
+present = set(df["word"].unique())
+selected = [a for a in animals if a in present]
+missing = [a for a in animals if a not in present]
+if missing:
+    print("Warning: missing classes with no samples:", missing)
+print("Using classes:", selected)
+
+df_animals = df[df["word"].isin(selected)].reset_index(drop=True)
+print("Class distribution (all):")
 print(df_animals["word"].value_counts())
 
-# optional: cache the subset so subsequent runs skip KaggleHub
-df_animals.to_csv("archive/animal_doodles.csv", index=False)
+# Stratified split train/test
+train_df, test_df = train_test_split(
+    df_animals, test_size=0.15, random_state=42, stratify=df_animals["word"]
+)
+train_df = train_df.reset_index(drop=True)
+test_df = test_df.reset_index(drop=True)
+
+print(f"Train size: {len(train_df)} | Test size: {len(test_df)}")
+print("Train distribution:")
+print(train_df["word"].value_counts())
+print("Test distribution:")
+print(test_df["word"].value_counts())
+
+# Save splits
+train_path = archive_dir / "animal_doodles_10_train.csv"
+test_path = archive_dir / "animal_doodles_10_test.csv"
+train_df.to_csv(train_path, index=False)
+test_df.to_csv(test_path, index=False)
+print(f"Saved: {train_path}")
+print(f"Saved: {test_path}")
+
+# Remove previous combined dataset if present
+legacy = archive_dir / "animal_doodles.csv"
+if legacy.exists():
+    legacy.unlink()
+    print(f"Removed old dataset: {legacy}")

@@ -43,6 +43,11 @@ class Config:
     min_seq_len: int = 6             # drop drawings with fewer than 6 moves
     max_len: int = 250               # cap sequence length for speed/memory (faster first run)
     per_class_limit: int = 1500      # limit per class for faster training; scale up later
+    # Optionally reduce number of classes to speed up training.
+    # If set, keeps only these classes (exact names in CSV's 'word' column).
+    allowed_classes: Optional[List[str]] = None
+    # Or keep the top-K most frequent classes. Ignored if allowed_classes is provided.
+    num_classes_limit: Optional[int] = None
     test_size: float = 0.15          # stratified split fraction
     batch_size: int = 64
     num_workers: int = 2             # try 2 workers for faster loading on M2
@@ -170,10 +175,14 @@ def build_or_load_cache(frame: pd.DataFrame, split: str, cfg: Config) -> Sequenc
         meta = np.load(str(meta_path))
         meta_max_len = int(meta["max_len"]) if "max_len" in meta else None
         meta_input = int(meta["input_size"]) if "input_size" in meta else None
-        if meta_max_len == int(cfg.max_len) and meta_input == int(cfg.input_size):
-            print(f"Loaded sequence cache ({split}) from {cache_dir}")
-            return SequenceCache(data_path, meta_path)
-        else:
+        # Also require the number of cached sequences to match current frame length
+        meta_num_seqs = int(meta["lengths"].shape[0]) if "lengths" in meta else -1
+        expected_num_seqs = int(len(frame))
+        if not (
+            meta_max_len == int(cfg.max_len)
+            and meta_input == int(cfg.input_size)
+            and meta_num_seqs == expected_num_seqs
+        ):
             # Invalidate old cache
             try:
                 data_path.unlink(missing_ok=True)
@@ -184,6 +193,9 @@ def build_or_load_cache(frame: pd.DataFrame, split: str, cfg: Config) -> Sequenc
             except Exception:
                 pass
             print(f"Cache incompatible for {split}, rebuilding…")
+        else:
+            print(f"Loaded sequence cache ({split}) from {cache_dir}")
+            return SequenceCache(data_path, meta_path)
 
     # Build cache
     print(f"Building sequence cache ({split}) in {cache_dir} …")
@@ -435,7 +447,20 @@ def build_frame_and_classes(cfg: Config) -> Tuple[pd.DataFrame, List[str]]:
     # Only keep rows with 'word' and 'drawing'
     df = df[["word", "drawing"]].dropna().reset_index(drop=True)
 
-    # Determine classes from the CSV content (unique animal labels)
+    # Optionally filter to a specific subset of classes
+    if cfg.allowed_classes:
+        allowed = set(cfg.allowed_classes)
+        before = len(df)
+        df = df[df["word"].isin(allowed)].reset_index(drop=True)
+        print(f"Filtered to allowed classes ({len(allowed)}): {sorted(list(allowed))} | rows: {before} -> {len(df)}")
+    elif cfg.num_classes_limit is not None and cfg.num_classes_limit > 0:
+        counts = df["word"].value_counts()
+        topk = counts.head(int(cfg.num_classes_limit)).index.tolist()
+        before = len(df)
+        df = df[df["word"].isin(topk)].reset_index(drop=True)
+        print(f"Kept top-{cfg.num_classes_limit} classes by frequency: {sorted(topk)} | rows: {before} -> {len(df)}")
+
+    # Determine classes from filtered CSV content (unique labels)
     classes = sorted(df["word"].unique().tolist())
 
     return df, classes
@@ -476,7 +501,7 @@ def make_loaders(train_df, val_df, classes, cfg: Config):
             batch_sampler=ListBatchSampler(train_batches),
             num_workers=cfg.num_workers,
             collate_fn=collator,
-            persistent_workers=True,
+            persistent_workers=(cfg.num_workers > 0),
         )
         # Validation: deterministic order, optional bucketing (no shuffle)
         val_batches = make_bucketed_batches(val_cache.lengths, cfg.batch_size, shuffle=False)
@@ -485,7 +510,7 @@ def make_loaders(train_df, val_df, classes, cfg: Config):
             batch_sampler=ListBatchSampler(val_batches),
             num_workers=cfg.num_workers,
             collate_fn=collator,
-            persistent_workers=True,
+            persistent_workers=(cfg.num_workers > 0),
         )
     else:
         train_ds = SketchDataset(train_df, class_to_idx, max_len=cfg.max_len, min_seq_len=cfg.min_seq_len)
@@ -497,7 +522,7 @@ def make_loaders(train_df, val_df, classes, cfg: Config):
             num_workers=cfg.num_workers,
             collate_fn=collator,
             drop_last=False,
-            persistent_workers=True,
+            persistent_workers=(cfg.num_workers > 0),
         )
         val_loader = DataLoader(
             val_ds,
@@ -506,7 +531,7 @@ def make_loaders(train_df, val_df, classes, cfg: Config):
             num_workers=cfg.num_workers,
             collate_fn=collator,
             drop_last=False,
-            persistent_workers=True,
+            persistent_workers=(cfg.num_workers > 0),
         )
 
     return train_loader, val_loader, class_to_idx
@@ -649,4 +674,18 @@ def run_training(cfg: Config):
 
 if __name__ == "__main__":
     cfg = Config()
+    # Prefer 10-class train split if present
+    try:
+        ten_train = Path(cfg.out_dir) / "animal_doodles_10_train.csv"
+        if ten_train.exists():
+            cfg.csv_path = str(ten_train)
+            print(f"Detected 10-class train split: {ten_train}")
+    except Exception:
+        pass
+    # Stronger defaults for a thorough 10-class run
+    cfg.per_class_limit = 0          # use all available samples
+    cfg.epochs = 15                  # longer run, early stopping still applies
+    cfg.patience = 4                 # allow a few plateaus before stopping
+    cfg.resume_from_best = True      # keep improving from best checkpoint
+    cfg.num_workers = 2              # speed up data loading if supported
     run_training(cfg)
