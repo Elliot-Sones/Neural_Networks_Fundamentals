@@ -7,30 +7,29 @@
 ## Recurrent Neural Networks
 [Simple to follow explanation of RNN](https://www.youtube.com/watch?v=AsNTP8Kwu80) 
 
-A **Recurrent Neural Network** is a neural network trained an sequential data (like text, time series or speech) to be able to make sequence based predictions.  
+A **Recurrent Neural Network** is a neural network trained on sequential data (like text, time series or speech) to be able to make sequence based predictions.  
 
-<img src="assets/RNN.jpeg" alt="RNN" width="420"/>
+<img src="assets/RNN.png" alt="RNN" width="420"/>
 
 
-They are able to do this by maintaining a **hidden state** (H) which acts like memory of the past inputs. After each new input, the RNN updates his hidden state on both the current inout and previous hidden state, allowing it to retain information over time.
+They are able to do this by maintaining a **hidden state** which acts like memory of the past inputs. After each new input, the RNN updates his hidden state on both the current input and previous hidden state, allowing it to retain information over time.
 
 <img src="assets/hiddenstate.svg" alt="hidden state" width="420"/>
 
-Although, as you might of realised, the repeated updates tend to shrink the gradients (called the vanishing gradient problem), causing the network to forget long-term dependencies.
+At each step, the weights ($W_x$ and $W_h$) are then applied to the current input ($x_t$) and the previous hidden state ($h_{t-1}$) (+ the bias ($b$) ) to compute the new hidden state (and apply activation function like *tanh* ).
 
-More advanced architechtures like Long Short-Term Memory (LSTM) and Gated  Recurret Unit (GRU) use gates to control the flow of the information allowing them to perserve important patterns.
+At each step: 
+$$
+h_t = \tanh(W_x x_t + W_h h_{t-1} + b)
+$$
+However, as you might of realised, the small weights multiplications cause the gradient to shrink exponentially during training (called the **vanishing gradient problem**), causing the network to forget long-term dependencies.
+
+More advanced architectures like Long Short-Term Memory (LSTM) and Gated  Recurret Unit (GRU) use gates to control the flow of information by deciding what information to keep, forget or add at each step. This allows to perserve important information over long dequences by creating a more stable gradient flow. 
+
 
 <img src="assets/compare.png" alt="compare" width="420"/>
 
-
-
-
-
-
-
-
-
-
+There are several types of RNN depending on the number of inputs and outputs in the network: One-to-One , One-to-Many, Many-to-One and Many-to-Many configurations
 
 
 
