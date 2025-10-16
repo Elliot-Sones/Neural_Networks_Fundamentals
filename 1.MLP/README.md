@@ -14,7 +14,7 @@ Or watch demo video:
   </a>
 </p>
 
-## My demo walkthough **why** it works
+## My demo walkthough why it works
 
 
 ## [Read training file to learn how to implement](/1.MLP/training.py)

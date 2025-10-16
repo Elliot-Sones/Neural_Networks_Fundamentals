@@ -8,7 +8,7 @@ import json
 import time
 from pathlib import Path
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 import numpy as np
 import pandas as pd
@@ -59,6 +59,12 @@ class Config:
     grad_clip: float = 1.0
     use_packing: bool = True         # if you see MPS issues, set to False
     out_dir: str = str((Path(__file__).resolve().parent / "archive"))
+    # Speedups
+    use_cache: bool = True
+    cache_dir: str = str((Path(__file__).resolve().parent / "archive" / "seq_cache_v1"))
+    n_buckets: int = 8               # length buckets for faster batches
+    scheduler_type: str = "onecycle"  # 'onecycle' or 'plateau'
+    resume_from_best: bool = True
 
 """
 Section 2: This is a helper function to parse the drawing string into a sequence of [dx, dy, pen_lift] 
@@ -125,6 +131,90 @@ class SketchDataset(Dataset):
         return seq, label
 
 
+class SequenceCache:
+    """Memory-mapped cache of concatenated sequences with offsets.
+
+    Stores truncated sequences (<= max_len) contiguously in a .npy file.
+    Offsets/lengths are stored in a small .npz file.
+    """
+    def __init__(self, data_path: Path, meta_path: Path):
+        self.data_path = data_path
+        self.meta_path = meta_path
+        meta = np.load(str(meta_path))
+        self.offsets: np.ndarray = meta["offsets"]
+        self.lengths: np.ndarray = meta["lengths"]
+        self.input_size: int = int(meta["input_size"]) if "input_size" in meta else 3
+        self.max_len_stored: int = int(meta["max_len"]) if "max_len" in meta else int(self.lengths.max(initial=0))
+        # lazy memmap; load in read-only mode
+        self.data = np.load(str(data_path), mmap_mode="r")
+
+    def __len__(self):
+        return self.offsets.shape[0]
+
+    def get_seq(self, idx: int) -> np.ndarray:
+        start = int(self.offsets[idx])
+        L = int(self.lengths[idx])
+        if L <= 0:
+            return np.zeros((0, self.input_size), dtype=np.float32)
+        return np.asarray(self.data[start:start + L], dtype=np.float32)
+
+
+def build_or_load_cache(frame: pd.DataFrame, split: str, cfg: Config) -> SequenceCache:
+    cache_dir = Path(cfg.cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    data_path = cache_dir / f"{split}_data.npy"
+    meta_path = cache_dir / f"{split}_meta.npz"
+
+    if data_path.exists() and meta_path.exists():
+        # Validate compatibility
+        meta = np.load(str(meta_path))
+        meta_max_len = int(meta["max_len"]) if "max_len" in meta else None
+        meta_input = int(meta["input_size"]) if "input_size" in meta else None
+        if meta_max_len == int(cfg.max_len) and meta_input == int(cfg.input_size):
+            print(f"Loaded sequence cache ({split}) from {cache_dir}")
+            return SequenceCache(data_path, meta_path)
+        else:
+            # Invalidate old cache
+            try:
+                data_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            try:
+                meta_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            print(f"Cache incompatible for {split}, rebuilding…")
+
+    # Build cache
+    print(f"Building sequence cache ({split}) in {cache_dir} …")
+    seq_lengths: List[int] = []
+    # First pass: compute lengths after truncation
+    for s in frame["drawing"].values:
+        seq = parse_drawing_to_seq(s)
+        L = min(int(seq.shape[0]), int(cfg.max_len))
+        seq_lengths.append(L)
+
+    total_len = int(sum(seq_lengths))
+    data = np.zeros((total_len, cfg.input_size), dtype=np.float32)
+    offsets = np.zeros((len(seq_lengths),), dtype=np.int64)
+
+    cursor = 0
+    for i, s in enumerate(frame["drawing"].values):
+        offsets[i] = cursor
+        seq = parse_drawing_to_seq(s)
+        L = min(int(seq.shape[0]), int(cfg.max_len))
+        if L > 0:
+            data[cursor:cursor + L, :] = seq[:L, :]
+            cursor += L
+
+    # Save to disk: data as .npy (mmap-able), metadata as .npz
+    np.save(str(data_path), data)
+    np.savez(str(meta_path), offsets=offsets, lengths=np.asarray(seq_lengths, dtype=np.int32), input_size=np.int32(cfg.input_size), max_len=np.int32(cfg.max_len))
+    print(f"Saved cache ({split}): {data_path.name}, {meta_path.name}")
+
+    return SequenceCache(data_path, meta_path)
+
+
 def collate_pad(batch: List[Tuple[np.ndarray, int]], max_len: int, min_seq_len: int | None = None):
     # Filter out too-short sequences to avoid zero-length packs
     filtered: List[Tuple[np.ndarray, int]] = []
@@ -166,6 +256,46 @@ class CollatePad:
 
     def __call__(self, batch: List[Tuple[np.ndarray, int]]):
         return collate_pad(batch, self.max_len, self.min_seq_len)
+
+
+class CachedSketchDataset(Dataset):
+    def __init__(self, frame: pd.DataFrame, class_to_idx: dict, cache: SequenceCache):
+        self.frame = frame.reset_index(drop=True)
+        self.class_to_idx = class_to_idx
+        self.cache = cache
+
+    def __len__(self):
+        return len(self.frame)
+
+    def __getitem__(self, idx: int):
+        row = self.frame.iloc[idx]
+        seq = self.cache.get_seq(idx)
+        label = self.class_to_idx[row["word"]]
+        return seq, label
+
+
+class ListBatchSampler:
+    def __init__(self, batches: List[List[int]]):
+        self.batches = batches
+
+    def __iter__(self):
+        for b in self.batches:
+            yield b
+
+    def __len__(self):
+        return len(self.batches)
+
+
+def make_bucketed_batches(lengths: np.ndarray, batch_size: int, shuffle: bool = True) -> List[List[int]]:
+    # Sort indices by length, then chunk, then shuffle batch order
+    idx = np.argsort(lengths.astype(np.int64))
+    batches: List[List[int]] = []
+    for i in range(0, len(idx), batch_size):
+        batches.append(idx[i:i + batch_size].tolist())
+    if shuffle:
+        rng = np.random.default_rng(42)
+        rng.shuffle(batches)
+    return batches
 
 """
 Section 4: Gru classifier. It reads the sequence, form a memeory of the shape and then map the memory to a label
@@ -224,7 +354,7 @@ def topk_accuracy(logits: torch.Tensor, targets: torch.Tensor, ks=(1, 3)):
         return res
 
 
-def train_one_epoch(model, loader, optimizer, device, grad_clip=1.0, label_smoothing=0.05, log_interval: int = 0):
+def train_one_epoch(model, loader, optimizer, device, grad_clip=1.0, label_smoothing=0.05, log_interval: int = 0, batch_scheduler: Optional[object] = None, scheduler_type: str = ""):
     model.train()
     criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
     total_loss, total_correct, total_count = 0.0, 0, 0
@@ -242,6 +372,8 @@ def train_one_epoch(model, loader, optimizer, device, grad_clip=1.0, label_smoot
         if grad_clip is not None and grad_clip > 0:
             nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()
+        if batch_scheduler is not None and scheduler_type == "onecycle":
+            batch_scheduler.step()
 
         with torch.no_grad():
             acc1, acc3 = topk_accuracy(logits, y, ks=(1, 3))
@@ -330,28 +462,52 @@ def stratify_and_cap(df: pd.DataFrame, classes: List[str], cfg: Config):
 
 def make_loaders(train_df, val_df, classes, cfg: Config):
     class_to_idx = {c: i for i, c in enumerate(classes)}
-    train_ds = SketchDataset(train_df, class_to_idx, max_len=cfg.max_len, min_seq_len=cfg.min_seq_len)
-    val_ds = SketchDataset(val_df, class_to_idx, max_len=cfg.max_len, min_seq_len=cfg.min_seq_len)
     collator = CollatePad(cfg.max_len, cfg.min_seq_len)
 
-    train_loader = DataLoader(
-        train_ds,
-        batch_size=cfg.batch_size,
-        shuffle=True,
-        num_workers=cfg.num_workers,
-        collate_fn=collator,
-        drop_last=False,
-        persistent_workers=True,
-    )
-    val_loader = DataLoader(
-        val_ds,
-        batch_size=cfg.batch_size,
-        shuffle=False,
-        num_workers=cfg.num_workers,
-        collate_fn=collator,
-        drop_last=False,
-        persistent_workers=True,
-    )
+    if cfg.use_cache:
+        train_cache = build_or_load_cache(train_df, "train", cfg)
+        val_cache = build_or_load_cache(val_df, "val", cfg)
+        train_ds = CachedSketchDataset(train_df, class_to_idx, train_cache)
+        val_ds = CachedSketchDataset(val_df, class_to_idx, val_cache)
+        # Length bucketing for train
+        train_batches = make_bucketed_batches(train_cache.lengths, cfg.batch_size, shuffle=True)
+        train_loader = DataLoader(
+            train_ds,
+            batch_sampler=ListBatchSampler(train_batches),
+            num_workers=cfg.num_workers,
+            collate_fn=collator,
+            persistent_workers=True,
+        )
+        # Validation: deterministic order, optional bucketing (no shuffle)
+        val_batches = make_bucketed_batches(val_cache.lengths, cfg.batch_size, shuffle=False)
+        val_loader = DataLoader(
+            val_ds,
+            batch_sampler=ListBatchSampler(val_batches),
+            num_workers=cfg.num_workers,
+            collate_fn=collator,
+            persistent_workers=True,
+        )
+    else:
+        train_ds = SketchDataset(train_df, class_to_idx, max_len=cfg.max_len, min_seq_len=cfg.min_seq_len)
+        val_ds = SketchDataset(val_df, class_to_idx, max_len=cfg.max_len, min_seq_len=cfg.min_seq_len)
+        train_loader = DataLoader(
+            train_ds,
+            batch_size=cfg.batch_size,
+            shuffle=True,
+            num_workers=cfg.num_workers,
+            collate_fn=collator,
+            drop_last=False,
+            persistent_workers=True,
+        )
+        val_loader = DataLoader(
+            val_ds,
+            batch_size=cfg.batch_size,
+            shuffle=False,
+            num_workers=cfg.num_workers,
+            collate_fn=collator,
+            drop_last=False,
+            persistent_workers=True,
+        )
 
     return train_loader, val_loader, class_to_idx
 
@@ -396,10 +552,41 @@ def run_training(cfg: Config):
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay
     )
-    # Some Torch builds do not accept 'verbose' in ReduceLROnPlateau; omit it for compatibility
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=2
-    )
+
+    # Optionally resume from best checkpoint
+    if cfg.resume_from_best:
+        best_path = Path(cfg.out_dir) / "rnn_animals_best.pt"
+        if best_path.exists():
+            try:
+                ckpt = torch.load(str(best_path), map_location="cpu")
+                ckpt_mapping = ckpt.get("class_to_idx")
+                if ckpt_mapping == class_to_idx:
+                    model.load_state_dict(ckpt["model_state"], strict=True)
+                    print(f"Resumed weights from {best_path}")
+                else:
+                    print("Checkpoint class mapping mismatch; skipping resume.")
+            except Exception as e:
+                print(f"Could not resume from checkpoint: {e}")
+
+    # Scheduler selection
+    scheduler_type = (cfg.scheduler_type or "").lower()
+    batch_scheduler = None
+    if scheduler_type == "onecycle":
+        steps_per_epoch = len(train_loader)
+        batch_scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=cfg.lr,
+            epochs=cfg.epochs,
+            steps_per_epoch=steps_per_epoch,
+            pct_start=0.3,
+            div_factor=3.0,
+            final_div_factor=10.0,
+        )
+    else:
+        # Some Torch builds do not accept 'verbose' in ReduceLROnPlateau; omit it for compatibility
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=2
+        )
 
     def _get_lr(opt: torch.optim.Optimizer) -> float:
         for pg in opt.param_groups:
@@ -416,17 +603,22 @@ def run_training(cfg: Config):
         train_metrics = train_one_epoch(
             model, train_loader, optimizer, device,
             grad_clip=cfg.grad_clip, label_smoothing=cfg.label_smoothing,
-            log_interval=100
+            log_interval=100,
+            batch_scheduler=batch_scheduler,
+            scheduler_type=scheduler_type,
         )
         val_metrics = evaluate(
             model, val_loader, device, label_smoothing=0.0
         )
-        scheduler.step(val_metrics["loss"])
-        # Log when LR changes (since 'verbose' may be unsupported in some torch builds)
-        curr_lr = _get_lr(optimizer)
-        if curr_lr != prev_lr:
-            print(f"LR reduced: {prev_lr:.6g} -> {curr_lr:.6g}")
-            prev_lr = curr_lr
+        if scheduler_type == "onecycle":
+            curr_lr = _get_lr(optimizer)
+        else:
+            scheduler.step(val_metrics["loss"])  # plateau
+            # Log when LR changes (since 'verbose' may be unsupported in some torch builds)
+            curr_lr = _get_lr(optimizer)
+            if curr_lr != prev_lr:
+                print(f"LR reduced: {prev_lr:.6g} -> {curr_lr:.6g}")
+                prev_lr = curr_lr
         dt = time.time() - t0
 
         print(

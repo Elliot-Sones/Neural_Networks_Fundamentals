@@ -1,11 +1,13 @@
-# MNIST-100 Production Pipeline
+# Convolutional Neural Network -> 0-99 digit classifier
+
+[Simple explanation of CNN](https://www.youtube.com/watch?v=QzY57FaENXg)
 
 **Goal**: Scale the MLP approach to recognizing two-digit numbers.
 **input data:** MNIST-100 28*56 pixel images of handwritten digits 0-99 (60k train / 10k test grayscale digits).
 
 
 ## Demo: 
-
+[Try it out for yourself]()
 
 
 
