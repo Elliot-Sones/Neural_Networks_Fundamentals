@@ -7,7 +7,7 @@
 ## Recurrent Neural Networks
 [Simple to follow explanation of RNN](https://www.youtube.com/watch?v=AsNTP8Kwu80) 
 
-A **Recurrent Neural Network** is a neural network trained on sequential data (like text, time series or speech) to be able to make sequence based predictions.  
+A **Recurrent Neural Network** is a neural network trained on sequential data (like text, time series, or speech) to make sequence-based predictions.
 
 <img src="assets/RNN.png" alt="RNN" width="420"/>
 
@@ -16,13 +16,13 @@ They are able to do this by maintaining a **hidden state** which acts like memor
 
 <img src="assets/hiddenstate.svg" alt="hidden state" width="420"/>
 
-At each step, the weights \(W_x\) and \(W_h\) are applied to the current input \(x_t\) and the previous hidden state \(h_{t-1}\), together with the bias \(b\), to compute the new hidden state and apply an activation such as \(\tanh\).
+At each step, the weights $W_x$ and $W_h$ are applied to the current input $x_t$ and the previous hidden state $h_{t-1}$, together with the bias $b$, to compute the new hidden state and apply an activation such as $\tanh$.
 
 At each step, the update is:
 
-\[
+$$
 h_t = \tanh\left(W_x x_t + W_h h_{t-1} + b\right)
-\]
+$$
 
 However, repeated multiplication by small weights causes gradients to shrink exponentially during training—the **vanishing gradient problem**—which makes the network forget long‑term dependencies.
 
@@ -31,7 +31,7 @@ More advanced architectures such as Long Short-Term Memory (LSTM) and Gated Recu
 
 <img src="assets/compare.png" alt="compare" width="420"/>
 
-There are several types of RNN depending on the number of inputs and outputs in the network: One-to-One , One-to-Many, Many-to-One and Many-to-Many configurations
+There are several RNN types depending on the number of inputs and outputs: one-to-one, one-to-many, many-to-one, and many-to-many.
 
 
 
@@ -56,11 +56,11 @@ Dev accuracy: 0.9945
 Epoch 15 | train_loss=0.3095 train_acc1=1.000 val_loss=0.3140 val_acc1=0.909 val_acc3=0.983 | 114.9s
 
 
-<img src="archive/plots/rnn_confusion_matrix.png" alt="Confusion matrix" width="420"/>
+<img src="archive/plots/rnn_confusion_matrix.png" alt="Confusion matrix" width="300"/>
 
-<img src="archive/plots/rnn_per_class_accuracy.png" alt="Per-class accuracy" width="420"/>
+<img src="archive/plots/rnn_per_class_accuracy.png" alt="Per-class accuracy" width="300"/>
 
-<img src="archive/plots/rnn_reliability.png" alt="Reliability diagram" width="420"/>
+<img src="archive/plots/rnn_reliability.png" alt="Reliability diagram" width="300"/>
 
-<img src="archive/plots/rnn_confidence_hist.png" alt="Confidence histogram" width="420"/>
+<img src="archive/plots/rnn_confidence_hist.png" alt="Confidence histogram" width="300"/>
 
