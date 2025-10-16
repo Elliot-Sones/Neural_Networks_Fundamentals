@@ -74,17 +74,17 @@ Hardest classes (lowest accuracy):
 <table>
   <tr>
     <td align="center">
-      <img src="assets/iteration1/loss.png" alt="CNN Loss curve" width="420"/><br/>
+      <img src="assets/CNN/loss.png" alt="CNN Loss curve" width="420"/><br/>
       <em>CNN training loss</em>
     </td>
     <td align="center">
-      <img src="assets/iteration1/accuracy.png" alt="CNN Accuracy curves" width="420"/><br/>
+      <img src="assets/CNN/accuracy.png" alt="CNN Accuracy curves" width="420"/><br/>
       <em>Train vs Dev accuracy </em>
     </td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="assets/iteration1/gap.png" alt="CNN Generalization gap" width="420"/><br/>
+  <img src="assets/CNN/gap.png" alt="CNN Generalization gap" width="420"/><br/>
   <em>Generalization gap (train − dev)</em>
 </p>
