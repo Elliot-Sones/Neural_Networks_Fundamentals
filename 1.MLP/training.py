@@ -25,7 +25,7 @@ EPSILON = 1e-8
 
 
 """
-Section 2: Loads the input data, transposes (so arrays are feature x samples) and normalises it (scales features to 0-1)
+Section 2: Loads the input data, transposes (so arrays are features x samples) and normalises it (scales features to 0-1)
 """
 def load_data(path):
     path = Path(path)

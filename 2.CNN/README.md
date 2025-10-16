@@ -57,7 +57,7 @@ I first implemented the MLP from the precious step:
 - **Evaluation utility**: `test_model.py` loads saved params and stats to report test accuracy and a simple per-class breakdown.
 
 ### CNN Results
-**98%** train set and **98%** on dev set
+20-epoch PyTorch run (full dataset), batch size 1024. Final epoch: ~96.6% train accuracy, ~94.7% dev accuracy. Curves below.
 
 **Test accuracy:** 97.88% (10000 samples)
 
@@ -74,18 +74,17 @@ Hardest classes (lowest accuracy):
 <table>
   <tr>
     <td align="center">
-      <img src="assets/iteration1/cnn_iteration1_loss.png" alt="CNN Loss curve (quick run)" width="420"/><br/>
+      <img src="assets/iteration1/cnn_iteration1_loss.png" alt="CNN Loss curve" width="420"/><br/>
       <em>CNN training loss</em>
     </td>
     <td align="center">
-      <img src="assets/iteration1/cnn_iteration1_accuracy.png" alt="CNN Accuracy curves (quick run)" width="420"/><br/>
+      <img src="assets/iteration1/cnn_iteration1_accuracy.png" alt="CNN Accuracy curves" width="420"/><br/>
       <em>Train vs Dev accuracy </em>
     </td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="assets/iteration1/cnn_iteration1_gap.png" alt="CNN Generalization gap (quick run)" width="420"/><br/>
+  <img src="assets/iteration1/cnn_iteration1_gap.png" alt="CNN Generalization gap" width="420"/><br/>
   <em>Generalization gap (train − dev)</em>
 </p>
-
