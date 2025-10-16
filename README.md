@@ -32,7 +32,7 @@ For detailed implementation, explanation and results see the [CNN README](2.CNN/
 
 
 ## 3. Recurrent Neural Network: Hand drawn doodles classification.
-[Try the RNN here]()
+[Try the RNN here](https://huggingface.co/spaces/Eli181927/animal_doodle_classifier)
 
 #### Simple explanation
 
