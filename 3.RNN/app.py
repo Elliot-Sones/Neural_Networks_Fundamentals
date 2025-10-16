@@ -9,6 +9,8 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw
 
+APP_VERSION = "rnn-app v0.3 (seq-cap + gain=0.04)"
+
 """RNN demo app.
 
 This file is also used on Hugging Face Spaces, where the project layout may
@@ -629,6 +631,7 @@ def build_ui() -> gr.Blocks:
 
         Game mode: you'll get a random target to draw. When the model predicts your target with ≥ 80% confidence, it counts as correct. Click "Next Target" or enable auto-advance.
         """)
+        gr.Markdown(f"Build: {APP_VERSION}")
 
         # Use built-in Sketchpad as the default canvas
         input_component = gr.Sketchpad(label="Draw here", brush=8, type="numpy", width=512, height=512)
