@@ -13,9 +13,14 @@
 
 CNN's are different than MLP because they have **convolutional layers** desgined recognise spacial patterns in data such as images.
 
-The **convolutional layers** are able to learn to detect patterns (like edges or textures) in an image using small (usually 3x3) filters (or kernels). 
+<img src="assets/cnnphoto/cnn.jpeg" alt="Convolutional layers" width="420"/>
 
-**Filters** slides across the image, and builds a feature map to recognise where certain visual patterns occur.
+
+The **convolutional layers** are able to learn to detect patterns (like edges or textures) in an image using small (usually 3x3) kernels (or filters). 
+
+**Kernels** slides across the image, and builds a feature map to recognise where certain visual patterns occur.
+
+<img src="assets/cnnphoto/maxpool.jpg" alt="Convolutional layers" width="420"/>
 
 After that, **pooling** layers (usually MaxPool) is then used to reduse the spacial dimensions to keep only the strongst signals from these feature maps and throws away the rest. This makes the network more efficient and less sensitive the noise.
 
