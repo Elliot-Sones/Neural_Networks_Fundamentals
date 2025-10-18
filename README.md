@@ -59,24 +59,33 @@ For detailed implementation and explanation, see the [MLP README](1.MLP/README.m
 
 Minimal steps to download data, train, test, and run the app.
 
+Two options:
+
+1) From-scratch (GPU recommended)
+
 ```bash
-# 1) Navigate to project folder and create virtual env
 cd 2.CNN
 python -m venv .venv && source .venv/bin/activate
-
-# 2) Install deps for the CNN
 pip install -r requirements.txt
-
-# 3) Download MNIST and create MNIST-100 dataset (writes to archive)
 python setup_data.py
+python training-100.py --epochs 20 --batch-size 256
+```
 
-# 4) Train (saves model to archive/trained_model_mnist100.npz)
-python training-100.py
+2) Libraries (fast on CPU)
 
-# 5) Evaluate on test set
+```bash
+cd 2.CNN
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python setup_data.py
+python training_torch.py --epochs 20 --batch-size 256 --device cpu
+```
+
+Evaluate and run the app:
+
+```bash
+cd 2.CNN
 python test_model.py
-
-# 6) Optional: launch the local demo UI
 python app.py
 ```
 

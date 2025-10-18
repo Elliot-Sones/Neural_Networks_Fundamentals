@@ -79,6 +79,46 @@ I first implemented the MLP from the precious step:
 - **Hparam search/pipeline**: LR sweep and log-uniform random search over (lr, λ); optional auto-train pipeline searches then retrains and saves `archive/trained_model_mnist100.npz` including `mean`/`std` for normalization.
 - **Evaluation utility**: `test_model.py` loads saved params and stats to report test accuracy and a simple per-class breakdown.
 
+### Training Options
+
+You can train this model in two ways:
+
+1) From-scratch NumPy implementation (GPU recommended)
+
+```bash
+cd 2.CNN
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# Prepare dataset (writes CSVs to 2.CNN/archive/)
+python setup_data.py
+
+# Train from scratch and save NPZ
+python training-100.py --epochs 20 --batch-size 256
+```
+
+2) Library-based PyTorch implementation (fast on CPU)
+
+```bash
+cd 2.CNN
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# Prepare dataset (writes CSVs to 2.CNN/archive/)
+python setup_data.py
+
+# Train with PyTorch and save checkpoint
+python training_torch.py --epochs 20 --batch-size 256 --device cpu
+
+# If you have a GPU, you can also use:
+# python training_torch.py --device cuda
+```
+
+Notes:
+- Both paths standardize inputs with the training-set mean/std to ensure identical preprocessing.
+- The PyTorch path saves `archive/trained_model_mnist100_torch.pt` with the model `state_dict`, `mean`, and `std`.
+- The from-scratch path saves `archive/trained_model_mnist100.npz` with raw parameters and normalization stats.
+
 ### CNN Results
 20-epoch run (full dataset), batch size 1024. Final epoch: ~96.6% train accuracy, ~94.7% dev accuracy. Curves below.
 
