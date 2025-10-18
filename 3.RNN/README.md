@@ -25,6 +25,7 @@ At each time step, the RNN takes 2 things:
 - The previous hidden state $h_{t-1}$
 
 it then updates the hidden state: 
+
 $$
 h_t = \tanh(W_x x_t + W_h h_{t-1} + b)
 $$
