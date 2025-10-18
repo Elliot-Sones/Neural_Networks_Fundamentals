@@ -6,7 +6,7 @@ Neural Networks are the foundation of modern machine learning, thus understandin
 
 
 ## 1. Mutli-Layered Perceptron: Handwritten 0-9 digits classification
-[Try the MLP here](https://huggingface.co/spaces/Eli181927/elliot_digit_classifier/)
+[Try the MLP digit classifier here](https://huggingface.co/spaces/Eli181927/elliot_digit_classifier/)
 
 ### MLP Quickstart
 
@@ -48,7 +48,7 @@ For detailed implementation and explanation, see the [MLP README](1.MLP/README.m
 
 
 ## 2. Convolutional Neural Network: Handwritten 0-99  digits classification (MNIST-100)
-[Try the CNN here](https://huggingface.co/spaces/Eli181927/0-99_Classification)
+[Try the CNN digit classifier here](https://huggingface.co/spaces/Eli181927/0-99_Classification)
 
 ### CNN Quickstart
 
@@ -89,7 +89,7 @@ For detailed implementation, explanation and results see the [CNN README](2.CNN/
 
 
 ## 3. Recurrent Neural Network: Hand drawn doodles classification.
-[Try the RNN here](https://huggingface.co/spaces/Eli181927/animal_doodle_classifier)
+[Try the RNN doodle classifier here](https://huggingface.co/spaces/Eli181927/animal_doodle_classifier)
 
 ### RNN Quickstart
 
