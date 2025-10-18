@@ -18,7 +18,7 @@ A **Recurrent Neural Network** is a neural network trained on sequential data (l
 They are able to do this by maintaining a **hidden state** which acts like a memory about what the network has seen so far.
 
 
-<img src="assets/hiddenstate.svg" alt="hidden state" width="420"/>
+<img src="assets/hiddenstate.png" alt="hidden state" width="420"/>
 
 At each time step, the RNN takes 2 things: 
 - The current input $x_t$
