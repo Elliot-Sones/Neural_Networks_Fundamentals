@@ -1,4 +1,3 @@
-## rgef
 import json
 from pathlib import Path
 import random

@@ -65,11 +65,4 @@ Or watch demo video:
 - Added diagnostic: shows exact 28x28 tensor fed into the NN, stroke density (sum of pixel value), center offset and area ratio. Found that the production input was too different from the training data. 
 - Passed heavy stress testing as shown in the video
 
-### Quick Start
-```bash
-python training.py     # retrain and persist weights/norm stats
-python test_model.py   # validate on the 10k MNIST test set
-python app.py          # launch the sketchpad digit inspector
-```
-
 Everything—from data ingestion to UI—runs in this repo with pure NumPy. No high-level ML frameworks, yet the model still delivers **97%+** accuracy and production-grade UX.

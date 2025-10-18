@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-set -e
-echo "[postBuild] Purging caches to reduce disk usage..."
-pip cache purge || true
-rm -rf ~/.cache/pip ~/.cache/huggingface ~/.cache/matplotlib ~/.cache/torch ~/.cache/scikit_image || true
-echo "[postBuild] Done."

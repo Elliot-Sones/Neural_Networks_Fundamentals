@@ -14,7 +14,8 @@ from numpy.lib.stride_tricks import sliding_window_view
 
 BASE_DIR = Path(__file__).resolve().parent
 ARCHIVE_DIR = BASE_DIR / "archive"
-DATASET_PATH = ARCHIVE_DIR / "mnist_compressed.npz"
+TRAIN_CSV_PATH = ARCHIVE_DIR / "mnist_train.csv"
+TEST_CSV_PATH = ARCHIVE_DIR / "mnist_test.csv"
 
 np.random.seed(42)
 
@@ -76,23 +77,34 @@ def save_sweep_summary(results, filepath, *, include_trial=False):
 """
 Section 2: Loads the input data, transposes (so arrays are feature x samples) and normalises it (scales features to 0-1)
 """
-def load_data(path: Path, dev_size: int = DEV_SIZE):
+def load_data(train_csv_path: Path = None, test_csv_path: Path = None, dev_size: int = DEV_SIZE):
     """
-    Load the MNIST-100 dataset from the compressed archive and return
+    Load the MNIST-100 dataset from CSV files and return
     training / validation splits flattened to (features, samples).
     """
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(f"Dataset not found at '{path}'")
+    if train_csv_path is None:
+        train_csv_path = TRAIN_CSV_PATH
+    if test_csv_path is None:
+        test_csv_path = TEST_CSV_PATH
+    
+    if not train_csv_path.exists():
+        raise FileNotFoundError(f"Training CSV not found at '{train_csv_path}'")
+    if not test_csv_path.exists():
+        raise FileNotFoundError(f"Test CSV not found at '{test_csv_path}'")
 
-    with np.load(path) as data:
-        train_images = data["train_images"].astype(np.float32)
-        train_labels = data["train_labels"].astype(np.int64)
-        test_images = data["test_images"].astype(np.float32)
-        test_labels = data["test_labels"].astype(np.int64)
+    # Load training data from CSV
+    import pandas as pd
+    train_df = pd.read_csv(train_csv_path)
+    train_labels = train_df['label'].values.astype(np.int64)
+    train_pixels = train_df.drop('label', axis=1).values.astype(np.float32)
+    
+    # Load test data from CSV
+    test_df = pd.read_csv(test_csv_path)
+    test_labels = test_df['label'].values.astype(np.int64)
+    test_pixels = test_df.drop('label', axis=1).values.astype(np.float32)
 
-    # Flatten images to column-major format (features, samples)
-    X_full = train_images.reshape(train_images.shape[0], -1).T  # (input_dim, m)
+    # Convert to column-major format (features, samples)
+    X_full = train_pixels.T  # (input_dim, m)
     Y_full = train_labels
 
     # Shuffle before splitting to validation
@@ -105,8 +117,8 @@ def load_data(path: Path, dev_size: int = DEV_SIZE):
     X_train = X_full[:, dev_size:]
     Y_train = Y_full[dev_size:]
 
-    # Also flatten the test set for later reuse if needed.
-    X_test = test_images.reshape(test_images.shape[0], -1).T
+    # Test set is already flattened
+    X_test = test_pixels.T
 
     return X_train, Y_train, X_dev, Y_dev, X_test, test_labels
 
@@ -658,7 +670,7 @@ def train_once(
     """
     Convenience wrapper for hyperparameter sweeps. Returns trained params and dev accuracy.
     """
-    X_train, Y_train, X_dev, Y_dev, _, _ = load_data(DATASET_PATH)
+    X_train, Y_train, X_dev, Y_dev, _, _ = load_data()
     X_train, X_dev, mean, std = normalize_features(X_train, X_dev)
 
     params, history = train_model(
@@ -938,8 +950,8 @@ def main():
         history_dir.mkdir(parents=True, exist_ok=True)
 
     if args.mode == "train":
-        print(f"Loading dataset from '{DATASET_PATH}'...")
-        X_train, Y_train, X_dev, Y_dev, _, _ = load_data(DATASET_PATH)
+        print(f"Loading dataset from CSV files...")
+        X_train, Y_train, X_dev, Y_dev, _, _ = load_data()
         X_train, X_dev, mean, std = normalize_features(X_train, X_dev)
 
         print(

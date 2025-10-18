@@ -28,7 +28,7 @@ def _load_training_module():
 training_mod = _load_training_module()
 
 ARCHIVE_DIR = training_mod.ARCHIVE_DIR
-DATASET_PATH = training_mod.DATASET_PATH
+# DATASET_PATH removed - now using CSV files directly
 forward_prop = training_mod.forward_prop
 get_predictions = training_mod.get_predictions
 
@@ -48,16 +48,19 @@ def load_model(filepath: Path | None = None):
     return params, mean, std
 
 
-def load_test_split(path: Path | None = None):
-    dataset_path = Path(path) if path is not None else DATASET_PATH
-    if not dataset_path.exists():
-        raise FileNotFoundError(f"Dataset archive not found at '{dataset_path}'")
+def load_test_split(test_csv_path: Path | None = None):
+    if test_csv_path is None:
+        test_csv_path = ARCHIVE_DIR / "mnist_test.csv"
+    
+    if not test_csv_path.exists():
+        raise FileNotFoundError(f"Test CSV not found at '{test_csv_path}'")
 
-    with np.load(dataset_path) as data:
-        images = data["test_images"].astype(np.float32)
-        labels = data["test_labels"].astype(np.int64)
+    import pandas as pd
+    test_df = pd.read_csv(test_csv_path)
+    labels = test_df['label'].values.astype(np.int64)
+    pixels = test_df.drop('label', axis=1).values.astype(np.float32)
 
-    X = images.reshape(images.shape[0], -1).T  # (features, samples)
+    X = pixels.T  # (features, samples)
     return X, labels
 
 
@@ -94,13 +97,13 @@ def main():
         "--dataset",
         type=Path,
         default=None,
-        help="Path to the mnist_compressed.npz dataset (defaults to archive/mnist_compressed.npz).",
+        help="Path to the test CSV file (defaults to archive/mnist_test.csv).",
     )
     parser.add_argument("--topk", type=int, default=5, help="Show the top-K classes with lowest accuracy.")
     args = parser.parse_args()
 
     params, mean, std = load_model(args.model)
-    X_test, y_test = load_test_split(args.dataset)
+    X_test, y_test = load_test_split()
 
     accuracy, predictions, probs = evaluate_on_test(params, mean, std, X_test, y_test)
     print(f"\nTest accuracy: {accuracy * 100:.2f}% ({predictions.size} samples)")
