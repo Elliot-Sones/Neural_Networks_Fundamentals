@@ -18,6 +18,7 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 
 
+# Using GPU if available, otherwise use CPU
 def get_device():
     if torch.backends.mps.is_available():
         return torch.device("mps")
@@ -27,6 +28,7 @@ def get_device():
         return torch.device("cpu")
 
 
+# Set the seed for reproducibility within the epochs but not between epochs
 def set_seed(seed: int = 42):
     import random
     random.seed(seed)
@@ -38,38 +40,78 @@ def set_seed(seed: int = 42):
 
 @dataclass
 class Config:
-    csv_path: str = str((Path(__file__).resolve().parent / "archive" / "animal_doodles.csv"))
+# ones to sweep: lr, model capacity (hidden_size, num_layers), dropout,  regs (weight decay) , batch size, scheduler type 
+# on small dataset, then slwoly scale up to full dataset with DSP
+    # ----------------------------
+    # Data paths and filtering
+    # ----------------------------
+    csv_path: str = str((Path(__file__).resolve().parent / "archive" / "animal_doodles_10_train.csv"))
     recognized_only: bool = True
     min_seq_len: int = 6             # drop drawings with fewer than 6 moves
     max_len: int = 250               # cap sequence length for speed/memory (faster first run)
-    per_class_limit: int = 1500      # limit per class for faster training; scale up later
-    # Optionally reduce number of classes to speed up training.
-    # If set, keeps only these classes (exact names in CSV's 'word' column).
+    per_class_limit: int = 10000    # limit per class for faster training; scale up later (1.5% of the dataset)
+    # Optional class filtering controls
     allowed_classes: Optional[List[str]] = None
-    # Or keep the top-K most frequent classes. Ignored if allowed_classes is provided.
     num_classes_limit: Optional[int] = None
-    test_size: float = 0.15          # stratified split fraction
-    batch_size: int = 64
-    num_workers: int = 2             # try 2 workers for faster loading on M2
-    input_size: int = 3              # [dx, dy, pen_lift]
-    hidden_size: int = 192
-    num_layers: int = 2
-    bidirectional: bool = True
-    dropout: float = 0.2
-    lr: float = 3e-3
-    weight_decay: float = 1e-2
-    label_smoothing: float = 0.05
-    epochs: int = 12                 # fewer epochs for quicker first pass
-    patience: int = 3                # earlier stop on plateau
-    grad_clip: float = 1.0
+
+    # ----------------------------
+    # Dataset split
+    # ----------------------------
+    test_size: float = 0.15          # val set (or dev set) size 
+
+    # ----------------------------
+    # Batching and loading
+    # ----------------------------
+    batch_size: int = 192             # the number of samples until one weight updates
+    num_workers: int = 4            # try 2 workers for faster loading on M2
+    n_buckets: int = 8               # length buckets for faster batches
     use_packing: bool = True         # if you see MPS issues, set to False
+    log_interval: int = 100          # per-batch logging interval (set 1 during LR sweep)
+
+    # ----------------------------
+    # Model architecture
+    # ----------------------------
+    input_size: int = 3              # [dx, dy, pen_lift]
+    hidden_size: int = 192           # the number of hidden units in the GRU
+    num_layers: int = 2              # the number of layers in the GRU
+    bidirectional: bool = True       # if True, the GRU is bidirectional    
+
+    # ----------------------------
+    # Regularization
+    # ----------------------------
+    dropout: float = 0.2             # regularization 
+    weight_decay: float = 1e-2       # L2 regularization 
+    label_smoothing: float = 0.05    # soften hard labels
+    grad_clip: float = 1.0           # gradient clipping to avoid exploding gradients
+
+    # ----------------------------
+    # Optimization & training loop
+    # ----------------------------
+    lr: float = 2e-3                 # learning rate
+    epochs: int = 15                # fewer epochs for quicker first pass
+    patience: int = 4                # earlier stop on plateau (if val doesnt improve for this amount of epochs, stop)
+    # LR sweep settings (range test)
+    do_lr_sweep: bool = False
+    lr_sweep_min: float = 1e-5
+    lr_sweep_max: float = 1e-1
+    lr_sweep_steps: int = 300        # number of mini-batches to sweep over
+    lr_sweep_early_stop: bool = True # stop sweep when loss diverges
+    lr_sweep_smooth: float = 0.05    # EMA smoothing for plotting (0..1, lower is smoother)
+
+    # ----------------------------
+    # I/O and caching
+    # ----------------------------
     out_dir: str = str((Path(__file__).resolve().parent / "archive"))
-    # Speedups
     use_cache: bool = True
     cache_dir: str = str((Path(__file__).resolve().parent / "archive" / "seq_cache_v1"))
-    n_buckets: int = 8               # length buckets for faster batches
+    plots_dir: str = str((Path(__file__).resolve().parent / "assets" / "plots"))
+
+    # ----------------------------
+    # Scheduling / checkpoints
+    # ----------------------------
     scheduler_type: str = "onecycle"  # 'onecycle' or 'plateau'
-    resume_from_best: bool = True
+    resume_from_best: bool = False
+
 
 """
 Section 2: This is a helper function to parse the drawing string into a sequence of [dx, dy, pen_lift] 
@@ -381,8 +423,17 @@ def train_one_epoch(model, loader, optimizer, device, grad_clip=1.0, label_smoot
         logits = model(x, lengths)
         loss = criterion(logits, y)
         loss.backward()
+        grad_norm_val = None
         if grad_clip is not None and grad_clip > 0:
-            nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+            # Returns total grad norm BEFORE clipping; useful to track
+            grad_norm_val = float(nn.utils.clip_grad_norm_(model.parameters(), grad_clip))
+        else:
+            # Compute norm without clipping if requested
+            total_sq = 0.0
+            for p in model.parameters():
+                if p.grad is not None:
+                    total_sq += float(p.grad.detach().pow(2).sum().item())
+            grad_norm_val = math.sqrt(total_sq) if total_sq > 0 else 0.0
         optimizer.step()
         if batch_scheduler is not None and scheduler_type == "onecycle":
             batch_scheduler.step()
@@ -398,7 +449,7 @@ def train_one_epoch(model, loader, optimizer, device, grad_clip=1.0, label_smoot
             curr_lr = optimizer.param_groups[0]["lr"]
             print(
                 f"  Batch {batch_idx + 1}/{len(loader)} | "
-                f"loss={loss.item():.4f} acc1={acc1:.3f} lr={curr_lr:.3g}"
+                f"loss={loss.item():.4f} acc1={acc1:.3f} lr={curr_lr:.3g} grad_norm={grad_norm_val:.3g}"
             )
 
     return {
@@ -628,7 +679,7 @@ def run_training(cfg: Config):
         train_metrics = train_one_epoch(
             model, train_loader, optimizer, device,
             grad_clip=cfg.grad_clip, label_smoothing=cfg.label_smoothing,
-            log_interval=100,
+            log_interval=cfg.log_interval,
             batch_scheduler=batch_scheduler,
             scheduler_type=scheduler_type,
         )
@@ -672,20 +723,209 @@ def run_training(cfg: Config):
     print(f"Saved model to: {final_path}")
 
 
-if __name__ == "__main__":
-    cfg = Config()
-    # Prefer 10-class train split if present
+def _ensure_dirs(cfg: Config):
+    Path(cfg.out_dir).mkdir(parents=True, exist_ok=True)
+    Path(cfg.plots_dir).mkdir(parents=True, exist_ok=True)
+
+
+@torch.no_grad()
+def _quick_val_loss(model: nn.Module, val_loader: DataLoader, device: torch.device, max_batches: int | None = None) -> float:
+    model.eval()
+    criterion = nn.CrossEntropyLoss()
+    total_loss = 0.0
+    total = 0
+    for i, (x, lengths, y) in enumerate(val_loader):
+        x = x.to(device)
+        y = y.to(device)
+        lengths = lengths.to(device)
+        logits = model(x, lengths)
+        loss = criterion(logits, y)
+        total_loss += float(loss.item()) * y.size(0)
+        total += int(y.size(0))
+        if max_batches is not None and (i + 1) >= max_batches:
+            break
+    return total_loss / max(1, total)
+
+
+def run_lr_range_sweep(cfg: Config):
+    """Perform a Leslie Smith LR range test and plot loss/grad_norm vs LR.
+
+    Records one optimizer step per training batch, increasing LR exponentially
+    from cfg.lr_sweep_min to cfg.lr_sweep_max over cfg.lr_sweep_steps steps.
+    Saves CSV and two plots under archive/ and assets/plots.
+    """
+    device = get_device()
+    set_seed(42)
+    print(f"Using device: {device}")
+
+    df, classes = build_frame_and_classes(cfg)
+    train_df, val_df = stratify_and_cap(df, classes, cfg)
+    train_loader, val_loader, class_to_idx = make_loaders(train_df, val_df, classes, cfg)
+
+    model = GRUClassifier(
+        input_size=cfg.input_size,
+        hidden_size=cfg.hidden_size,
+        num_layers=cfg.num_layers,
+        bidirectional=cfg.bidirectional,
+        dropout=cfg.dropout,
+        num_classes=len(classes),
+        use_packing=cfg.use_packing,
+    ).to(device)
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr_sweep_min, weight_decay=cfg.weight_decay)
+
+    # Precompute LR schedule (log-spaced)
+    steps = int(cfg.lr_sweep_steps)
+    lrs = np.logspace(math.log10(cfg.lr_sweep_min), math.log10(cfg.lr_sweep_max), steps)
+
+    # Containers
+    history = {
+        "iter": [],
+        "lr": [],
+        "train_loss": [],
+        "grad_norm": [],
+    }
+
+    criterion = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
+    ema = None
+    smooth = float(max(0.0, min(1.0, cfg.lr_sweep_smooth)))
+
+    it = 0
+    diverged = False
+    for batch in train_loader:
+        if it >= steps:
+            break
+        # Set LR for this step
+        lr_val = float(lrs[it])
+        for pg in optimizer.param_groups:
+            pg["lr"] = lr_val
+
+        x, lengths, y = batch
+        x = x.to(device)
+        y = y.to(device)
+        lengths = lengths.to(device)
+
+        optimizer.zero_grad(set_to_none=True)
+        logits = model(x, lengths)
+        loss = criterion(logits, y)
+        loss.backward()
+        # Track grad norm (pre-clip)
+        if cfg.grad_clip is not None and cfg.grad_clip > 0:
+            grad_norm = float(nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip))
+        else:
+            total_sq = 0.0
+            for p in model.parameters():
+                if p.grad is not None:
+                    total_sq += float(p.grad.detach().pow(2).sum().item())
+            grad_norm = math.sqrt(total_sq) if total_sq > 0 else 0.0
+        optimizer.step()
+
+        # Optional EMA smoothing of loss for stability
+        loss_val = float(loss.item())
+        ema = loss_val if ema is None else (smooth * ema + (1.0 - smooth) * loss_val)
+
+        history["iter"].append(it)
+        history["lr"].append(lr_val)
+        history["train_loss"].append(ema if smooth > 0 else loss_val)
+        history["grad_norm"].append(float(grad_norm))
+
+        if (it + 1) % max(1, cfg.log_interval) == 0:
+            print(f"  iter={it+1}/{steps} lr={lr_val:.3g} loss={loss_val:.4f} ema={ema:.4f} grad_norm={grad_norm:.3g}")
+
+        # Early stop on divergence
+        if cfg.lr_sweep_early_stop:
+            if not math.isfinite(loss_val) or (ema is not None and ema > 10.0):
+                print("Loss diverged during sweep; stopping early.")
+                diverged = True
+                break
+
+        it += 1
+
+    # Compute a quick validation loss snapshot
+    val_loss = _quick_val_loss(model, val_loader, device, max_batches=5)
+    print(f"Validation loss (quick, ~5 batches): {val_loss:.4f}")
+
+    # Save CSV
+    _ensure_dirs(cfg)
+    import pandas as _pd
+    sweep_df = _pd.DataFrame(history)
+    csv_path = Path(cfg.out_dir) / "lr_sweep.csv"
+    sweep_df.to_csv(csv_path, index=False)
+    print(f"Saved LR sweep log: {csv_path}")
+
+    # Plots
     try:
-        ten_train = Path(cfg.out_dir) / "animal_doodles_10_train.csv"
-        if ten_train.exists():
-            cfg.csv_path = str(ten_train)
-            print(f"Detected 10-class train split: {ten_train}")
+        import matplotlib.pyplot as plt
+        # Train loss vs LR
+        fig1, ax1 = plt.subplots(figsize=(6, 4))
+        ax1.plot(sweep_df["lr"], sweep_df["train_loss"], label="train_loss")
+        ax1.set_xscale("log")
+        ax1.set_xlabel("Learning rate (log)")
+        ax1.set_ylabel("Train loss (smoothed)" if smooth > 0 else "Train loss")
+        ax1.set_title("LR Range Test: Loss vs LR")
+        ax1.grid(True, which="both", ls=":", alpha=0.4)
+        fig1.tight_layout()
+        p1 = Path(cfg.plots_dir) / "lr_range_train_loss.png"
+        fig1.savefig(p1, dpi=150)
+        plt.close(fig1)
+
+        # Grad norm vs LR
+        fig2, ax2 = plt.subplots(figsize=(6, 4))
+        ax2.plot(sweep_df["lr"], sweep_df["grad_norm"], color="tab:orange", label="grad_norm")
+        ax2.set_xscale("log")
+        ax2.set_xlabel("Learning rate (log)")
+        ax2.set_ylabel("Grad norm (pre-clip)")
+        ax2.set_title("LR Range Test: Grad Norm vs LR")
+        ax2.grid(True, which="both", ls=":", alpha=0.4)
+        fig2.tight_layout()
+        p2 = Path(cfg.plots_dir) / "lr_range_grad_norm.png"
+        fig2.savefig(p2, dpi=150)
+        plt.close(fig2)
+        print(f"Saved plots: {p1}, {p2}")
+    except Exception as e:
+        print(f"Plotting failed: {e}")
+
+    # Heuristic suggestion: pick LR with lowest smoothed loss before gradient norm spikes
+    try:
+        gl = np.asarray(history["grad_norm"]) if len(history["grad_norm"]) else None
+        tl = np.asarray(history["train_loss"]) if len(history["train_loss"]) else None
+        lr_arr = np.asarray(history["lr"]) if len(history["lr"]) else None
+        if gl is not None and tl is not None and lr_arr is not None:
+            # Mask out clearly divergent region (grad norm > 2x median)
+            med = np.median(gl)
+            ok = gl < (2.0 * max(1e-8, med))
+            if ok.any():
+                idx = np.argmin(np.where(ok, tl, np.inf))
+            else:
+                idx = int(np.argmin(tl))
+            best_lr = float(lr_arr[idx])
+            print(f"Suggested LR (range test): ~{best_lr:.3g}")
     except Exception:
         pass
-    # Stronger defaults for a thorough 10-class run
-    cfg.per_class_limit = 0          # use all available samples
-    cfg.epochs = 15                  # longer run, early stopping still applies
-    cfg.patience = 4                 # allow a few plateaus before stopping
-    cfg.resume_from_best = True      # keep improving from best checkpoint
-    cfg.num_workers = 2              # speed up data loading if supported
-    run_training(cfg)
+
+
+if __name__ == "__main__":
+    # Lightweight CLI to pick between normal training and LR sweep
+    import argparse as _argparse
+    parser = _argparse.ArgumentParser(description="Train RNN doodle classifier or run an LR sweep.")
+    parser.add_argument("--lr_sweep", action="store_true", help="Run LR range test instead of full training.")
+    parser.add_argument("--lr_min", type=float, default=None, help="Min LR for sweep (overrides config).")
+    parser.add_argument("--lr_max", type=float, default=None, help="Max LR for sweep (overrides config).")
+    parser.add_argument("--steps", type=int, default=None, help="Steps (batches) for LR sweep.")
+    parser.add_argument("--log_every", type=int, default=None, help="Per-batch log interval.")
+    args = parser.parse_args()
+
+    cfg = Config()
+    if args.lr_min is not None:
+        cfg.lr_sweep_min = float(args.lr_min)
+    if args.lr_max is not None:
+        cfg.lr_sweep_max = float(args.lr_max)
+    if args.steps is not None:
+        cfg.lr_sweep_steps = int(args.steps)
+    if args.log_every is not None:
+        cfg.log_interval = int(args.log_every)
+
+    if args.lr_sweep or cfg.do_lr_sweep:
+        run_lr_range_sweep(cfg)
+    else:
+        run_training(cfg)
