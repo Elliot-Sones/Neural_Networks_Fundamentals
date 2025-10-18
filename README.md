@@ -13,23 +13,24 @@ Neural Networks are the foundation of modern machine learning, thus understandin
 Minimal steps to download data, train, test, and run the app.
 
 ```bash
-# 1) Create and activate a virtual env (recommended)
+# 1) Navigate to project folder and create virtual env
+cd 1.MLP
 python -m venv .venv && source .venv/bin/activate
 
 # 2) Install deps for the MLP
-pip install -r 1.MLP/requirements.txt
+pip install -r requirements.txt
 
-# 3) Download MNIST and prepare CSVs (writes to 1.MLP/archive)
-python 1.MLP/setup_data.py
+# 3) Download MNIST and prepare CSVs (writes to archive)
+python setup_data.py
 
-# 4) Train (saves model to 1.MLP/archive/trained_model.npz)
-python 1.MLP/training.py
+# 4) Train (saves model to archive/trained_model.npz)
+python training.py
 
 # 5) Evaluate on test set
-python 1.MLP/test_model.py
+python test_model.py
 
 # 6) Optional: launch the local demo UI
-python 1.MLP/app.py
+python app.py
 ```
 
 Notes:
@@ -54,23 +55,24 @@ For detailed implementation and explanation, see the [MLP README](1.MLP/README.m
 Minimal steps to download data, train, test, and run the app.
 
 ```bash
-# 1) Create and activate a virtual env (recommended)
+# 1) Navigate to project folder and create virtual env
+cd 2.CNN
 python -m venv .venv && source .venv/bin/activate
 
 # 2) Install deps for the CNN
-pip install -r 2.CNN/requirements.txt
+pip install -r requirements.txt
 
-# 3) Download MNIST and create MNIST-100 dataset (writes to 2.CNN/archive)
-python 2.CNN/setup_data.py
+# 3) Download MNIST and create MNIST-100 dataset (writes to archive)
+python setup_data.py
 
-# 4) Train (saves model to 2.CNN/archive/trained_model_mnist100.npz)
-python 2.CNN/training-100.py
+# 4) Train (saves model to archive/trained_model_mnist100.npz)
+python training-100.py
 
 # 5) Evaluate on test set
-python 2.CNN/test_model.py
+python test_model.py
 
 # 6) Optional: launch the local demo UI
-python 2.CNN/app.py
+python app.py
 ```
 
 Notes:
@@ -94,23 +96,24 @@ For detailed implementation, explanation and results see the [CNN README](2.CNN/
 Minimal steps to download data, train, test, and run the app.
 
 ```bash
-# 1) Create and activate a virtual env (recommended)
+# 1) Navigate to project folder and create virtual env
+cd 3.RNN
 python -m venv .venv && source .venv/bin/activate
 
 # 2) Install deps for the RNN
-pip install -r 3.RNN/requirements.txt
+pip install -r requirements.txt
 
-# 3) Download Quick Draw dataset and prepare splits (writes to 3.RNN/archive)
-python 3.RNN/setup_data.py
+# 3) Download Quick Draw dataset and prepare splits (writes to archive)
+python setup_data.py
 
-# 4) Train (saves model to 3.RNN/archive/rnn_animals_best.pt)
-python 3.RNN/training-doodle.py
+# 4) Train (saves model to archive/rnn_animals_best.pt)
+python training-doodle.py
 
 # 5) Evaluate on test set and generate plots
-python 3.RNN/eval_and_plots.py
+python eval_and_plots.py
 
 # 6) Optional: launch the local demo UI
-python 3.RNN/app.py
+python app.py
 ```
 
 Notes:
