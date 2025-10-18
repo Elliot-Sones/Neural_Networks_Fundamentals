@@ -11,14 +11,14 @@
 
 CNN's are different than MLP because they have **convolutional layers** desgined recognise spacial patterns in data such as images.
 
-<img src="assets/cnnphoto/cnn.jpeg" alt="Convolutional layers" width="420"/>
+<img src="assets/CNN_explanation/cnn.jpeg" alt="Convolutional layers" width="420"/>
 
 
 The **convolutional layers** are able to learn to detect patterns (like edges or textures) in an image using small (usually 3x3) kernels (or filters). 
 
 **Kernels** slides across the image, and builds a feature map to recognise where certain visual patterns occur.
 
-<img src="assets/cnnphoto/maxpool.jpg" alt="Convolutional layers" width="420"/>
+<img src="assets/CNN_explanation/maxpool.jpg" alt="Convolutional layers" width="420"/>
 
 After that, **pooling** layers (usually MaxPool) is then used to reduse the spacial dimensions to keep only the strongst signals from these feature maps and throws away the rest. This makes the network more efficient and less sensitive the noise.
 
@@ -46,11 +46,11 @@ I first implemented the MLP from the precious step:
 <table>
   <tr>
     <td align="center">
-      <img src="assets/loss_curve.png" alt="Loss curve" width="420"/><br/>
+      <img src="assets/CNN_1st_iteration/loss_curve.png" alt="Loss curve" width="420"/><br/>
       <em>Training loss over epochs</em>
     </td>
     <td align="center">
-      <img src="assets/accuracy_curves.png" alt="Accuracy curves" width="420"/><br/>
+      <img src="assets/CNN_1st_iteration/accuracy_curves.png" alt="Accuracy curves" width="420"/><br/>
       <em>Train vs Dev accuracy — note widening gap</em>
     </td>
   </tr>
@@ -58,7 +58,7 @@ I first implemented the MLP from the precious step:
 </table>
 
 <p align="center">
-  <img src="assets/generalization_gap.png" alt="Generalization gap" width="420"/><br/>
+  <img src="assets/CNN_1st_iteration/generalization_gap.png" alt="Generalization gap" width="420"/><br/>
   <em>Generalization gap (train − dev), highlighting overfitting</em>
 </p>
 
@@ -97,17 +97,17 @@ Hardest classes (lowest accuracy):
 <table>
   <tr>
     <td align="center">
-      <img src="assets/CNN/loss.png" alt="CNN Loss curve" width="420"/><br/>
+      <img src="assets/CNN_2nd_iteration/loss.png" alt="CNN Loss curve" width="420"/><br/>
       <em>CNN training loss</em>
     </td>
     <td align="center">
-      <img src="assets/CNN/accuracy.png" alt="CNN Accuracy curves" width="420"/><br/>
+      <img src="assets/CNN_2nd_iteration/accuracy.png" alt="CNN Accuracy curves" width="420"/><br/>
       <em>Train vs Dev accuracy </em>
     </td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="assets/CNN/gap.png" alt="CNN Generalization gap" width="420"/><br/>
+  <img src="assets/CNN_2nd_iteration/gap.png" alt="CNN Generalization gap" width="420"/><br/>
   <em>Generalization gap (train − dev)</em>
 </p>
