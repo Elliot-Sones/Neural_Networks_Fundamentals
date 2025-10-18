@@ -8,12 +8,32 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw
 
-APP_VERSION = "rnn-app v0.4 (full-canvas + fixed-res preprocess)"
+APP_VERSION = "rnn-app v0.5 (train-compare + tuning constants)"
 # Visual canvas size (pixels). Large for near full-screen.
 DISPLAY_CANVAS_SIZE = 1024
 # Internal working resolution for vectorization to keep accuracy stable
 # regardless of display size and to bound compute.
 WORK_RES = 800
+
+# Sketchpad defaults (hardcoded for easy tweaking)
+SKETCH_BRUSH_SIZE = 8  # pixels
+# Note: Gradio Sketchpad may not expose opacity directly. Raster thresholding below
+# makes light strokes still work; adjust BIN_OTSU_FUDGE/BIN_P90_FACTOR if needed.
+
+# Diagnostics and rendering constants
+DIAG_PREVIEW_SIZE = 256  # pixels for diagnostic preview images
+STROKE_RENDER_WIDTH = 4  # width when rendering vector strokes for previews
+TRAIN_PREVIEW_SAMPLES_PER_CLASS = 8  # how many training examples to cache per class
+
+# Binarization and cleanup constants
+BIN_OTSU_FUDGE = 0.85       # multiply OTSU threshold by this factor
+BIN_P90_FACTOR = 0.20       # fallback threshold as fraction of 90th percentile
+MASK_MIN_SIZE_DIVISOR = 5000  # min object size ~ (H*W)//divisor
+
+# Sequence calibration constants
+CALIB_TARGET_MEAN = 0.04
+CALIB_MAX_GAIN = 12.0
+CALIB_MIN_GAIN = 0.5
 
 """RNN demo app.
 
@@ -98,16 +118,29 @@ def _load_checkpoint(path: Path):
 def _resolve_checkpoint_path(base_dir: Path) -> Path:
     """Find the checkpoint in common layouts.
 
-    Prefers a local `archive/rnn_animals_best.pt` next to this file, but also
-    checks `RNN/archive/` and `3.RNN/archive/` when the app is at repo root.
+    Prefers `rnn_animals_best.pt`, falls back to `rnn_animals_last.pt`.
+    Checks next to this file as well as `RNN/` and `3.RNN/` roots.
+    Respects env `RNN_CKPT_PATH` if provided.
     """
-    candidates = [
-        base_dir / "archive" / "rnn_animals_best.pt",
-        base_dir / "RNN" / "archive" / "rnn_animals_best.pt",
-        base_dir / "3.RNN" / "archive" / "rnn_animals_best.pt",
-        Path.cwd() / "RNN" / "archive" / "rnn_animals_best.pt",
-        Path.cwd() / "3.RNN" / "archive" / "rnn_animals_best.pt",
+    # Env override first
+    env_ckpt = os.environ.get("RNN_CKPT_PATH")
+    if env_ckpt:
+        p = Path(env_ckpt)
+        if p.exists():
+            return p
+
+    names = ["rnn_animals_best.pt", "rnn_animals_last.pt"]
+    roots = [
+        base_dir / "archive",
+        base_dir / "RNN" / "archive",
+        base_dir / "3.RNN" / "archive",
+        Path.cwd() / "RNN" / "archive",
+        Path.cwd() / "3.RNN" / "archive",
     ]
+    candidates: list[Path] = []
+    for r in roots:
+        for n in names:
+            candidates.append(r / n)
     for p in candidates:
         if p.exists():
             return p
@@ -220,7 +253,7 @@ def _prepare_sequence(input_obj: Any) -> np.ndarray:
     return np.zeros((0, 3), dtype=np.float32)
 
 
-def _calibrate_seq(seq: np.ndarray, target_mean: float = 0.04, max_gain: float = 12.0, min_gain: float = 0.5) -> np.ndarray:
+def _calibrate_seq(seq: np.ndarray, target_mean: float = CALIB_TARGET_MEAN, max_gain: float = CALIB_MAX_GAIN, min_gain: float = CALIB_MIN_GAIN) -> np.ndarray:
     """Scale (dx, dy) so the mean step magnitude roughly matches `target_mean`.
 
     This makes raster-to-stroke conversion behave closer to QuickDraw stroke
@@ -348,13 +381,13 @@ def _raster_to_quickdraw_strokes(img_input: Any) -> List[List[List[int]]]:
     inv = 255 - gray
     try:
         thr_val = float(threshold_otsu(inv.astype(_np.float32)))
-        mask = inv > max(8.0, thr_val * 0.85)
+        mask = inv > max(8.0, thr_val * BIN_OTSU_FUDGE)
     except Exception:
         p90 = float(_np.percentile(inv, 90))
-        thr = int(max(8.0, min(40.0, p90 * 0.2)))
+        thr = int(max(8.0, min(40.0, p90 * BIN_P90_FACTOR)))
         mask = inv > thr
     # Remove tiny speckles to stabilize skeleton
-    mask = remove_small_objects(mask.astype(bool), min_size=max(16, (H * W) // 5000))
+    mask = remove_small_objects(mask.astype(bool), min_size=max(16, (H * W) // MASK_MIN_SIZE_DIVISOR))
     if not _np.any(mask):
         return []
 
@@ -553,9 +586,9 @@ def _diagnose_raster(img_input: Any, strokes: List[List[List[int]]], seq_len: in
     inv = 255 - gray
     try:
         thr_val = float(threshold_otsu(inv.astype(_np.float32)))
-        mask = inv > max(8.0, thr_val * 0.85)
+        mask = inv > max(8.0, thr_val * BIN_OTSU_FUDGE)
     except Exception:
-        thr = max(16, int(_np.percentile(inv, 90) * 0.3))
+        thr = max(16, int(_np.percentile(inv, 90) * BIN_P90_FACTOR))
         mask = inv > thr
     mass_fraction = float(mask.mean())
     skel = skeletonize(mask).astype(_np.uint8)
@@ -609,6 +642,74 @@ def _diagnose_raster(img_input: Any, strokes: List[List[List[int]]], seq_len: in
     return "\n".join(diag_lines), mask_img, skel_img, path_img
 
 
+def _render_strokes_image(strokes: List[List[List[int]]], size: int = DIAG_PREVIEW_SIZE, stroke_width: int = STROKE_RENDER_WIDTH) -> Optional[np.ndarray]:
+    try:
+        canvas = Image.new("L", (size, size), color=255)
+        draw = ImageDraw.Draw(canvas)
+        scale = (size - 1) / 255.0
+        for st in strokes:
+            if not isinstance(st, (list, tuple)) or len(st) != 2:
+                continue
+            xs, ys = st
+            n = min(len(xs), len(ys))
+            if n < 2:
+                continue
+            pts = [(int(round(xs[i] * scale)), int(round(ys[i] * scale))) for i in range(n)]
+            draw.line(pts, fill=0, width=int(stroke_width))
+        return np.array(canvas, dtype=np.uint8)
+    except Exception:
+        return None
+
+
+def _resolve_train_csv_path(base_dir: Path) -> Optional[Path]:
+    candidates = [
+        base_dir / "archive" / "animal_doodles_10_train.csv",
+        base_dir / "RNN" / "archive" / "animal_doodles_10_train.csv",
+        base_dir / "3.RNN" / "archive" / "animal_doodles_10_train.csv",
+        Path.cwd() / "RNN" / "archive" / "animal_doodles_10_train.csv",
+        Path.cwd() / "3.RNN" / "archive" / "animal_doodles_10_train.csv",
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    return None
+
+
+def _load_training_previews(csv_path: Path, classes: List[str], per_class: int = TRAIN_PREVIEW_SAMPLES_PER_CLASS) -> Dict[str, List[np.ndarray]]:
+    previews: Dict[str, List[np.ndarray]] = {c: [] for c in classes}
+    try:
+        import pandas as _pd
+    except Exception:
+        return previews
+
+    # Stream the CSV in chunks; collect the first N per class for speed/memory
+    try:
+        chunksize = 50000
+        for chunk in _pd.read_csv(str(csv_path), usecols=["word", "drawing"], chunksize=chunksize):
+            sub = chunk[chunk["word"].isin(classes)]
+            if len(sub) == 0:
+                # continue scanning
+                continue
+            for _, row in sub.iterrows():
+                cls = str(row["word"])
+                if len(previews[cls]) >= per_class:
+                    continue
+                try:
+                    strokes = json.loads(row["drawing"])  # [[xs],[ys]] list
+                except Exception:
+                    continue
+                img = _render_strokes_image(strokes, size=DIAG_PREVIEW_SIZE, stroke_width=STROKE_RENDER_WIDTH)
+                if img is not None:
+                    previews[cls].append(img)
+            # Early exit when all classes reached quota
+            if all(len(previews[c]) >= per_class for c in classes):
+                break
+    except Exception:
+        # If streaming fails, return whatever collected (possibly empty)
+        pass
+    return previews
+
+
 class RNNPredictor:
     def __init__(self, ckpt_path: Optional[str] = None, conf_threshold: float = 0.8):
         base_dir = Path(__file__).resolve().parent
@@ -616,8 +717,9 @@ class RNNPredictor:
         self.ckpt_path = Path(ckpt_path) if ckpt_path else default_ckpt
         if not self.ckpt_path.exists():
             raise FileNotFoundError(
-                f"Checkpoint not found at {self.ckpt_path}. Ensure the model file is uploaded "
-                f"(e.g., RNN/archive/rnn_animals_best.pt) and .hfignore does not exclude it."
+                f"Checkpoint not found at {self.ckpt_path}. Ensure one of the files exists: "
+                f"rnn_animals_best.pt or rnn_animals_last.pt under archive/. "
+                f"You can also set env RNN_CKPT_PATH to the checkpoint file."
             )
         self.model, self.idx_to_class = _load_checkpoint(self.ckpt_path)
         self.device = get_device()
@@ -661,7 +763,7 @@ def build_ui() -> gr.Blocks:
         # Internal processing always rescales to WORK_RES, so accuracy is unchanged.
         input_component = gr.Sketchpad(
             label="Draw here",
-            brush=8,
+            brush=SKETCH_BRUSH_SIZE,
             type="numpy",
             width=DISPLAY_CANVAS_SIZE,
             height=DISPLAY_CANVAS_SIZE,
@@ -676,6 +778,17 @@ def build_ui() -> gr.Blocks:
 
         # Game state
         classes = [predictor.idx_to_class[i] for i in range(len(predictor.idx_to_class))]
+        # Preload a few training previews for side-by-side comparison
+        base_dir = Path(__file__).resolve().parent
+        train_csv = _resolve_train_csv_path(base_dir)
+        training_previews: Dict[str, List[np.ndarray]] = {}
+        if train_csv is not None:
+            try:
+                training_previews = _load_training_previews(train_csv, classes, per_class=TRAIN_PREVIEW_SAMPLES_PER_CLASS)
+            except Exception:
+                training_previews = {c: [] for c in classes}
+        else:
+            training_previews = {c: [] for c in classes}
         def _pick_target(prev: Optional[str] = None) -> str:
             choices = [c for c in classes if c != prev] if prev in classes and len(classes) > 1 else classes
             return random.choice(choices)
@@ -701,6 +814,9 @@ def build_ui() -> gr.Blocks:
                 diag_mask = gr.Image(label="Binarized mask", image_mode="L")
                 diag_skel = gr.Image(label="Skeleton", image_mode="L")
                 diag_path = gr.Image(label="Stroke path preview", image_mode="L")
+            with gr.Row():
+                diag_train_target = gr.Image(label="Training sample (target class)", image_mode="L")
+                diag_train_pred = gr.Image(label="Training sample (predicted class)", image_mode="L")
 
         def _fmt_target(t: str) -> str:
             return f"Target: {t}"
@@ -743,6 +859,14 @@ def build_ui() -> gr.Blocks:
             diag_md, mask_img, skel_img, path_img = _diagnose_raster(
                 raster_src, strokes, int(seq.shape[0]), avg_step_override=avg_step
             ) if raster_src is not None else ("Provide a drawing for diagnostics.", None, None, None)
+            # Select training previews for comparison
+            def _pick_preview(cls_name: str) -> Optional[np.ndarray]:
+                lst = training_previews.get(cls_name) or []
+                if not lst:
+                    return None
+                return random.choice(lst)
+            target_preview = _pick_preview(target)
+            pred_preview = _pick_preview(pred_label) if pred_label else None
             if not pred_label:
                 return (
                     gr.update(value="Draw or paste strokes to begin."),
@@ -751,6 +875,8 @@ def build_ui() -> gr.Blocks:
                     mask_img,
                     skel_img,
                     path_img,
+                    target_preview,
+                    pred_preview,
                     gr.update(value=_fmt_target(target)),
                     gr.update(value=_fmt_score(score, attempts)),
                     target,
@@ -770,6 +896,8 @@ def build_ui() -> gr.Blocks:
                     mask_img,
                     skel_img,
                     path_img,
+                    target_preview,
+                    pred_preview,
                     gr.update(value=_fmt_target(target)),
                     gr.update(value=_fmt_score(score, attempts)),
                     target,
@@ -793,6 +921,8 @@ def build_ui() -> gr.Blocks:
                         mask_img,
                         skel_img,
                         path_img,
+                        _pick_preview(new_t),
+                        _pick_preview(pred_label),
                         gr.update(value=_fmt_target(new_t)),
                         gr.update(value=_fmt_score(score, attempts)),
                         new_t,
@@ -809,6 +939,8 @@ def build_ui() -> gr.Blocks:
                 mask_img,
                 skel_img,
                 path_img,
+                target_preview,
+                pred_preview,
                 gr.update(value=_fmt_target(target)),
                 gr.update(value=_fmt_score(score, attempts)),
                 target,
@@ -821,7 +953,7 @@ def build_ui() -> gr.Blocks:
         input_component.change(
             _predict_fn,
             inputs=[input_component, target_state, score_state, attempts_state, auto_next],
-            outputs=[status, label, diag_text, diag_mask, diag_skel, diag_path, target_md, score_md, target_state, score_state, attempts_state, input_component],
+            outputs=[status, label, diag_text, diag_mask, diag_skel, diag_path, diag_train_target, diag_train_pred, target_md, score_md, target_state, score_state, attempts_state, input_component],
         )
         # Some Spaces/Gradio versions emit edits via `.edit` instead of `.change`.
         # Hook both to be safe (idempotent since we update full outputs each call).
@@ -829,7 +961,7 @@ def build_ui() -> gr.Blocks:
             input_component.edit(
                 _predict_fn,
                 inputs=[input_component, target_state, score_state, attempts_state, auto_next],
-                outputs=[status, label, diag_text, diag_mask, diag_skel, diag_path, target_md, score_md, target_state, score_state, attempts_state, input_component],
+                outputs=[status, label, diag_text, diag_mask, diag_skel, diag_path, diag_train_target, diag_train_pred, target_md, score_md, target_state, score_state, attempts_state, input_component],
             )
 
         # Provide a manual predict button as well
@@ -837,7 +969,7 @@ def build_ui() -> gr.Blocks:
         btn.click(
             _predict_fn,
             inputs=[input_component, target_state, score_state, attempts_state, auto_next],
-            outputs=[status, label, diag_text, diag_mask, diag_skel, diag_path, target_md, score_md, target_state, score_state, attempts_state, input_component],
+            outputs=[status, label, diag_text, diag_mask, diag_skel, diag_path, diag_train_target, diag_train_pred, target_md, score_md, target_state, score_state, attempts_state, input_component],
         )
 
         # Game controls
@@ -851,6 +983,8 @@ def build_ui() -> gr.Blocks:
                 gr.update(value="Draw to see diagnostics."),
                 None,
                 None,
+                None,
+                random.choice(training_previews.get(new_t, [])) if training_previews.get(new_t) else None,
                 None,
                 gr.update(value=_fmt_target(new_t)),
                 gr.update(value=_fmt_score(score, attempts)),
@@ -871,6 +1005,8 @@ def build_ui() -> gr.Blocks:
                 None,
                 None,
                 None,
+                random.choice(training_previews.get(new_t, [])) if training_previews.get(new_t) else None,
+                None,
                 gr.update(value=_fmt_target(new_t)),
                 gr.update(value=_fmt_score(score, attempts)),
                 new_t,
@@ -885,12 +1021,12 @@ def build_ui() -> gr.Blocks:
         next_btn.click(
             _next_target,
             inputs=[target_state, score_state, attempts_state],
-            outputs=[input_component, status, label, diag_text, diag_mask, diag_skel, diag_path, target_md, score_md, target_state, score_state, attempts_state],
+            outputs=[input_component, status, label, diag_text, diag_mask, diag_skel, diag_path, diag_train_target, diag_train_pred, target_md, score_md, target_state, score_state, attempts_state],
         )
         reset_btn.click(
             _reset,
             inputs=[input_component],
-            outputs=[input_component, status, label, diag_text, diag_mask, diag_skel, diag_path, target_md, score_md, target_state, score_state, attempts_state],
+            outputs=[input_component, status, label, diag_text, diag_mask, diag_skel, diag_path, diag_train_target, diag_train_pred, target_md, score_md, target_state, score_state, attempts_state],
         )
 
     return demo

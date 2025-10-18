@@ -71,8 +71,12 @@ There are several RNN types depending on the number of inputs and outputs: one-t
 - System: Apple MPS acceleration; save best/last checkpoints for deployment.
 
 ## Results & Plots
-Test accuracy: 0.9788
-Dev accuracy: 0.9945
+
+Test samples: 188 779
+Top-1 accuracy: 94.36%
+Top-3 accuracy: 99.10%
+
+
 
 Epoch 15 | train_loss=0.3095 train_acc1=1.000 val_loss=0.3140 val_acc1=0.909 val_acc3=0.983 | 114.9s
 
@@ -84,4 +88,9 @@ Epoch 15 | train_loss=0.3095 train_acc1=1.000 val_loss=0.3140 val_acc1=0.909 val
 <img src="assets/plots/rnn_reliability.png" alt="Reliability diagram" width="300"/>
 
 <img src="assets/plots/rnn_confidence_hist.png" alt="Confidence histogram" width="300"/>
+
+
+
+
+
 

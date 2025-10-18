@@ -2,6 +2,7 @@
 Section 1: This section manages imports, config, and device selection
 """
 import os
+import random
 import ast
 import math
 import json
@@ -49,7 +50,7 @@ class Config:
     recognized_only: bool = True
     min_seq_len: int = 6             # drop drawings with fewer than 6 moves
     max_len: int = 250               # cap sequence length for speed/memory (faster first run)
-    per_class_limit: int = 10000    # limit per class for faster training; scale up later (1.5% of the dataset)
+    per_class_limit: int = 20000    # limit per class for faster training; scale up later 
     # Optional class filtering controls
     allowed_classes: Optional[List[str]] = None
     num_classes_limit: Optional[int] = None
@@ -62,27 +63,38 @@ class Config:
     # ----------------------------
     # Batching and loading
     # ----------------------------
-    batch_size: int = 192             # the number of samples until one weight updates
+    batch_size: int = 256             # the number of samples until one weight updates
     num_workers: int = 4            # try 2 workers for faster loading on M2
     n_buckets: int = 8               # length buckets for faster batches
     use_packing: bool = True         # if you see MPS issues, set to False
     log_interval: int = 100          # per-batch logging interval (set 1 during LR sweep)
+    grad_accum_steps: int = 3         # gradient accumulation steps (increase effective batch size)
 
     # ----------------------------
     # Model architecture
     # ----------------------------
     input_size: int = 3              # [dx, dy, pen_lift]
-    hidden_size: int = 192           # the number of hidden units in the GRU
-    num_layers: int = 2              # the number of layers in the GRU
+    hidden_size: int = 384          # the number of hidden units in the GRU
+    num_layers: int = 3             # the number of layers in the GRU
     bidirectional: bool = True       # if True, the GRU is bidirectional    
 
     # ----------------------------
     # Regularization
     # ----------------------------
-    dropout: float = 0.2             # regularization 
+    dropout: float = 0.3            # regularization 
     weight_decay: float = 1e-2       # L2 regularization 
     label_smoothing: float = 0.05    # soften hard labels
     grad_clip: float = 1.0           # gradient clipping to avoid exploding gradients
+    
+    # ----------------------------
+    # Data augmentation (on-the-fly)
+    # ----------------------------
+    aug_prob: float = 0.5            # probability to augment a sample
+    aug_rotate_deg: float = 20.0     # rotation (stddev, degrees) applied to deltas
+    aug_scale_min: float = 0.85      # uniform scale lower bound (on deltas)
+    aug_scale_max: float = 1.20      # uniform scale upper bound
+    aug_jitter_std: float = 0.01     # Gaussian noise std on dx,dy
+    aug_flip_prob: float = 0.0       # optional horizontal flip (negate dx)
 
     # ----------------------------
     # Optimization & training loop
@@ -328,6 +340,62 @@ class CachedSketchDataset(Dataset):
         return seq, label
 
 
+def _augment_seq_deltas(seq: np.ndarray, cfg: Config) -> np.ndarray:
+    """Apply simple geometric/noise augmentation in delta space.
+
+    - Random rotation around origin by N(0, aug_rotate_deg)
+    - Random uniform scale in [aug_scale_min, aug_scale_max]
+    - Optional horizontal flip of dx
+    - Small Gaussian jitter on dx,dy
+    """
+    if seq is None or seq.ndim != 2 or seq.shape[1] < 2 or seq.shape[0] == 0:
+        return seq
+    dxdy = seq[:, 0:2].astype(np.float32)
+    pen = seq[:, 2:3].astype(np.float32) if seq.shape[1] > 2 else None
+
+    # Rotation
+    theta = np.deg2rad(np.random.normal(loc=0.0, scale=float(cfg.aug_rotate_deg)))
+    c, s = np.cos(theta, dtype=np.float32), np.sin(theta, dtype=np.float32)
+    R = np.array([[c, -s], [s, c]], dtype=np.float32)
+    dxdy = dxdy @ R.T
+
+    # Scale
+    scale = float(np.random.uniform(low=float(cfg.aug_scale_min), high=float(cfg.aug_scale_max)))
+    dxdy = dxdy * scale
+
+    # Optional horizontal flip
+    if np.random.rand() < float(cfg.aug_flip_prob):
+        dxdy[:, 0] = -dxdy[:, 0]
+
+    # Jitter
+    if float(cfg.aug_jitter_std) > 0:
+        dxdy = dxdy + np.random.normal(0.0, float(cfg.aug_jitter_std), size=dxdy.shape).astype(np.float32)
+
+    out = seq.astype(np.float32).copy()
+    out[:, 0:2] = np.clip(dxdy, -1.0, 1.0)
+    if pen is not None and out.shape[1] >= 3:
+        out[:, 2] = pen[:, 0]
+    return out
+
+
+class AugmentingDataset(Dataset):
+    """Wrap a base dataset and apply on-the-fly delta-space augmentation."""
+    def __init__(self, base: Dataset, cfg: Config):
+        self.base = base
+        self.cfg = cfg
+
+    def __len__(self):
+        return len(self.base)
+
+    def __getitem__(self, idx: int):
+        seq, label = self.base[idx]
+        if float(self.cfg.aug_prob) > 0 and np.random.rand() < float(self.cfg.aug_prob):
+            try:
+                seq = _augment_seq_deltas(seq, self.cfg)
+            except Exception:
+                pass
+        return seq, label
+
 class ListBatchSampler:
     def __init__(self, batches: List[List[int]]):
         self.batches = batches
@@ -408,35 +476,33 @@ def topk_accuracy(logits: torch.Tensor, targets: torch.Tensor, ks=(1, 3)):
         return res
 
 
-def train_one_epoch(model, loader, optimizer, device, grad_clip=1.0, label_smoothing=0.05, log_interval: int = 0, batch_scheduler: Optional[object] = None, scheduler_type: str = ""):
+def train_one_epoch(model, loader, optimizer, device, grad_clip=1.0, label_smoothing=0.05, log_interval: int = 0, batch_scheduler: Optional[object] = None, scheduler_type: str = "", grad_accum_steps: int = 1):
     model.train()
     criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
     total_loss, total_correct, total_count = 0.0, 0, 0
     total_top3 = 0.0
 
+    accum = max(1, int(grad_accum_steps))
+    optimizer.zero_grad(set_to_none=True)
     for batch_idx, (x, lengths, y) in enumerate(loader):
         x = x.to(device)
         y = y.to(device)
         lengths = lengths.to(device)
 
-        optimizer.zero_grad(set_to_none=True)
         logits = model(x, lengths)
         loss = criterion(logits, y)
-        loss.backward()
+        # normalize loss for accumulation
+        (loss / accum).backward()
         grad_norm_val = None
-        if grad_clip is not None and grad_clip > 0:
-            # Returns total grad norm BEFORE clipping; useful to track
-            grad_norm_val = float(nn.utils.clip_grad_norm_(model.parameters(), grad_clip))
-        else:
-            # Compute norm without clipping if requested
-            total_sq = 0.0
-            for p in model.parameters():
-                if p.grad is not None:
-                    total_sq += float(p.grad.detach().pow(2).sum().item())
-            grad_norm_val = math.sqrt(total_sq) if total_sq > 0 else 0.0
-        optimizer.step()
-        if batch_scheduler is not None and scheduler_type == "onecycle":
-            batch_scheduler.step()
+        took_step = False
+        if ((batch_idx + 1) % accum) == 0:
+            if grad_clip is not None and grad_clip > 0:
+                grad_norm_val = float(nn.utils.clip_grad_norm_(model.parameters(), grad_clip))
+            optimizer.step()
+            took_step = True
+            if batch_scheduler is not None and scheduler_type == "onecycle":
+                batch_scheduler.step()
+            optimizer.zero_grad(set_to_none=True)
 
         with torch.no_grad():
             acc1, acc3 = topk_accuracy(logits, y, ks=(1, 3))
@@ -449,7 +515,9 @@ def train_one_epoch(model, loader, optimizer, device, grad_clip=1.0, label_smoot
             curr_lr = optimizer.param_groups[0]["lr"]
             print(
                 f"  Batch {batch_idx + 1}/{len(loader)} | "
-                f"loss={loss.item():.4f} acc1={acc1:.3f} lr={curr_lr:.3g} grad_norm={grad_norm_val:.3g}"
+                f"loss={loss.item():.4f} acc1={acc1:.3f} lr={curr_lr:.3g} "
+                f"grad_norm={(grad_norm_val if grad_norm_val is not None else 0.0):.3g} "
+                f"accum={accum} step={(1 if took_step else 0)}"
             )
 
     return {
@@ -545,6 +613,9 @@ def make_loaders(train_df, val_df, classes, cfg: Config):
         val_cache = build_or_load_cache(val_df, "val", cfg)
         train_ds = CachedSketchDataset(train_df, class_to_idx, train_cache)
         val_ds = CachedSketchDataset(val_df, class_to_idx, val_cache)
+        # Optional augmentation wrapper on train set only
+        if float(cfg.aug_prob) > 0:
+            train_ds = AugmentingDataset(train_ds, cfg)
         # Length bucketing for train
         train_batches = make_bucketed_batches(train_cache.lengths, cfg.batch_size, shuffle=True)
         train_loader = DataLoader(
@@ -566,6 +637,8 @@ def make_loaders(train_df, val_df, classes, cfg: Config):
     else:
         train_ds = SketchDataset(train_df, class_to_idx, max_len=cfg.max_len, min_seq_len=cfg.min_seq_len)
         val_ds = SketchDataset(val_df, class_to_idx, max_len=cfg.max_len, min_seq_len=cfg.min_seq_len)
+        if float(cfg.aug_prob) > 0:
+            train_ds = AugmentingDataset(train_ds, cfg)
         train_loader = DataLoader(
             train_ds,
             batch_size=cfg.batch_size,
@@ -625,6 +698,9 @@ def run_training(cfg: Config):
         use_packing=cfg.use_packing,
     ).to(device)
 
+    eff_bsz = int(cfg.batch_size) * max(1, int(cfg.grad_accum_steps))
+    print(f"Batch size: {cfg.batch_size} | Grad accum: {cfg.grad_accum_steps} | Effective batch: {eff_bsz}")
+
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay
     )
@@ -682,6 +758,7 @@ def run_training(cfg: Config):
             log_interval=cfg.log_interval,
             batch_scheduler=batch_scheduler,
             scheduler_type=scheduler_type,
+            grad_accum_steps=cfg.grad_accum_steps,
         )
         val_metrics = evaluate(
             model, val_loader, device, label_smoothing=0.0
