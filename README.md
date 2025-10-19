@@ -2,7 +2,7 @@
 
 Neural Networks are the foundation of modern machine learning, thus understanding the main types of architectures like **Multi-Layered Perceptron**, **Convolutional Neural Networks** and **Recurrent Neural Networks** are crucial. 
 
- In this project, I will explore these architechtues from scratch explaining in simple way allowing for hands on learning and quick and easy deployment of your model. 
+In this project, I will explore these architectures from scratch, explaining ina  simple way, allowing for hands-on learning and quick and easy deployment of your model. 
 
 
 ## 1. Mutli-Layered Perceptron: Handwritten 0-9 digits classification
