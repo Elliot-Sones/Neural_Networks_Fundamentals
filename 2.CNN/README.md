@@ -1,6 +1,6 @@
 # Convolutional Neural Network -> 0-99 digit classifier
 
-**Goal:** Scale the MLP approach to recognizing two-digit numbers.
+**Goal:** Scale the MLP approach to recognizing two-digit numbers using convolutional neural networks/
 **input data:** MNIST-100 28*56 pixel images of handwritten digits 0-99 (60k train / 10k test grayscale digits).
 
 #### [Try out the demo for yourself](https://huggingface.co/spaces/Eli181927/0-99_Classification)
