@@ -74,6 +74,10 @@ Notes:
 ## 2. Convolutional Neural Network: MNIST-100 (0–99 Digits) Classification Problem 
 [Try the CNN digit classifier here](https://huggingface.co/spaces/Eli181927/0-99_Classification)
 
+| <img src="2.CNN/assets/CNN_explanation/cnn.jpeg" width="400" alt="Accuracy"> | <img src="2.CNN/assets/CNN_explanation/dataset-cover.png" width="400" alt="Loss"> |
+|---|---|
+| Convolutional Neural Network| MNIST-100 Dataset Image|
+
 In this section we will be evaluating where the MLP will not be good enough for this dataset and explain how and why implementing a Convolutional Neural Network performs better.
 
 For detailed explanation and implementation see the [CNN README](2.CNN/README.md) and the [training code](2.CNN/training_torch.py).
@@ -136,6 +140,10 @@ Notes:
 <a id="rnn"></a>
 ## 3. Recurrent Neural Network: Hand-Drawn Doodles Classification
 [Try the RNN doodle classifier here](https://huggingface.co/spaces/Eli181927/animal_doodle_classifier)
+
+| <img src="3.RNN/assets/RNN.png" width="400" alt="Accuracy"> | <img src="3.RNN/assets/data.png" width="400" alt="Loss"> |
+|---|---|
+| Recurrant Neural Network| Animal Doodle Dataset Image|
 
 In this section we will be implementing a Recurrent Neural Network on hand-drawn animal doodles. 
 
