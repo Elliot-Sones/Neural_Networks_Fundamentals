@@ -6,7 +6,13 @@ In this project, I will explore these architectures from scratch, explaining how
 
 
 
-Jump to: [MLP](#mlp) | [CNN](#cnn) | [RNN](#rnn) | [Data](#data)
+## Table of Contents
+
+- [1. Multi-Layer Perceptron](#mlp)
+- [2. Convolutional Neural Network](#cnn) 
+- [3. Recurrent Neural Network](#rnn)
+- [Data](#data)
+
 
 <a id="mlp"></a>
 ## [1. Multi-Layer Perceptron:](1.MLP/README.md) MNIST Classification Problem
