@@ -12,6 +12,10 @@ Jump to: [MLP](#mlp) | [CNN](#cnn) | [RNN](#rnn) | [Data](#data)
 ## 1. Multi-Layer Perceptron: MNIST Classification Problem
 [Try the MLP digit classifier Demo here](https://huggingface.co/spaces/Eli181927/elliot_digit_classifier/)
 
+| <img src="1.MLP/assets/mlp.png" width="400" alt="Accuracy"> | <img src="1.MLP/assets/digit.png" width="400" alt="Loss"> |
+|---|---|
+| Multi-Layer Perceotron| MNIST Dataset Image|
+
 In this section I will be explaining how to implement a Multi-Layer Perceptron from scratch (no libraries) to solve the MNIST digit classification problem.
 
 For detailed explanation and implementation, see the [MLP README](1.MLP/README.md) and the [training code](1.MLP/training.py). 
