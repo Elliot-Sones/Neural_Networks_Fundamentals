@@ -17,7 +17,7 @@ In this project, I will explore these architectures from scratch, explaining how
 
 
 <a id="mlp"></a>
-## [1. Multi-Layer Perceptron:](1.MLP/README.md) MNIST Classification Problem
+## 1. Multi-Layer Perceptron: MNIST Classification Problem
 [Try the MLP digit classifier Demo here](https://huggingface.co/spaces/Eli181927/elliot_digit_classifier/)
 
 | <img src="1.MLP/assets/mlp.png" width="400" alt="Accuracy"> | <img src="1.MLP/assets/digit.png" width="400" alt="Loss"> |
