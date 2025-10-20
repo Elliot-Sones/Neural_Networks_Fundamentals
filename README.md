@@ -2,17 +2,21 @@
 
 Neural Networks are the foundation of modern machine learning, thus understanding the main types of architectures like **Multi-Layered Perceptron**, **Convolutional Neural Networks** and **Recurrent Neural Networks** are crucial. 
 
-In this project, I will explore these architectures from scratch, explaining ina  simple way, allowing for hands-on learning and quick and easy deployment of your model. 
+In this project, I will explore these architectures from scratch, explaining how they work and to implement them in code, allowing for hands-on learning and quick and easy deployment of your model. 
 
 
-## 1. Mutli-Layered Perceptron: Handwritten 0-9 digits classification
-[Try the MLP digit classifier here](https://huggingface.co/spaces/Eli181927/elliot_digit_classifier/)
+## 1. Mutli-Layered Perceptron: MNIST classfication problem
+[Try the MLP digit classifier Demo here](https://huggingface.co/spaces/Eli181927/elliot_digit_classifier/)
 
-#### Simple explanation:
-- **Goal** – Accurately predict hand drawn digits in production
+In this section I will be explaining how to implement a Multi-layered perceptron from scratch (no libraires) to solve the MNIST digit classification problem.
+
+For detailed explanation and implementation, see the [MLP README](1.MLP/README.md) and the [training code](/1.MLP/training.py). 
+
+#### MNIST Classification problem
+- **Goal** – Accurately predict hand drawn digits in production. 
 - **Dataset** – MNIST 28*28 pixel images(60k train / 10k test grayscale digits).
-- **Implementation** – 3-layer ReLU MLP trained with Adam, He init, and L2 regularization.
-- **Result** – About 97% accuracy on the held-out test set.
+- **My implementation** – 4-layer ReLU MLP trained with Adam, He initialisation, and L2 regularization.
+- **Result** – About 97% accuracy on test set 
 
 #### MLP Quickstart
 
@@ -40,14 +44,15 @@ python app.py
 ```
 
 Notes:
-- **Data**: `1.MLP/setup_data.py` pulls MNIST from a reliable mirror and writes `mnist_train.csv` and `mnist_test.csv` under `1.MLP/archive` in the exact format expected by `training.py` and `test_model.py`.
-- **Model file**: Training creates `1.MLP/archive/trained_model.npz`, which the demo app loads automatically.
-
-For detailed implementation and explanation, see the [MLP README](1.MLP/README.md). 
+- **Data**: 1.MLP/setup_data.py pulls MNIST from a reliable mirror and writes 'mnist_train.csv and mnist_test.csv under 1.MLP/archive in the exact format expected by training.py and test_model.py.
+- **Model file**: Training creates 1.MLP/archive/trained_model.npz, which the demo app loads automatically.
 
 
-## 2. Convolutional Neural Network: Handwritten 0-99  digits classification (MNIST-100)
+
+## 2. Convolutional Neural Network: MNIST-100 (0-99  digits) classification problem 
 [Try the CNN digit classifier here](https://huggingface.co/spaces/Eli181927/0-99_Classification)
+
+In this section we will be evaluating where the MLP will not be good enough and 
 
 #### Simple explanation:
 - **Goal** – Scale the scratch-built approach to recognizing two-digit numbers.
