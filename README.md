@@ -20,7 +20,7 @@ In this project, I will explore these architectures from scratch, explaining how
 ## 1. Multi-Layer Perceptron: MNIST Classification Problem
 [Try the MLP digit classifier Demo here](https://huggingface.co/spaces/Eli181927/elliot_digit_classifier/)
 
-| <img src="1.MLP/assets/mlp.png" width="400" alt="Accuracy"> | <img src="1.MLP/assets/digit.png" width="400" alt="Loss"> |
+| <img src="1.MLP/assets/mlp.png" width="400" alt="Accuracy"> | <img src="1.MLP/assets/digit.png" width="300" alt="Loss"> |
 |---|---|
 | Multi-Layer Perceotron| MNIST Dataset Image|
 
