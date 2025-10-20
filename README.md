@@ -53,7 +53,7 @@ For detailed implementation and explanation, see the [MLP README](1.MLP/README.m
 - **Goal** – Scale the scratch-built approach to recognizing two-digit numbers.
 - **Dataset** – Paired-MNIST where two 28×28 digits are concatenated into 28×56 images for 00–99 labels.
 - **Implementation** – Stride-1 CNN with pooling, dropout, Adam, and auto-tuning to streamline training.
-- **Result** – Consistently around 90% dev accuracy powering the production Gradio demo.
+- **Result** – Test accuracy 97.88% (10000 samples)
 
 #### CNN Quickstart
 
@@ -103,7 +103,7 @@ For detailed implementation, explanation and results see the [CNN README](2.CNN/
 - **Goal** – Classify hand-drawn doodles into 10 animal classes.
 - **Dataset** – Google Quick, Draw! stroke sequences (dx, dy, pen-lift).
 - **Implementation** – 2-layer bidirectional GRU with sequence packing, AdamW, dropout, label smoothing, and grad clipping.
-- **Result** – Around 91% top-1 validation accuracy (≈98.6% top-3).
+- **Result** – 188 779 test samples: 94.36% accuracy.
 
 #### RNN Quickstart
 
