@@ -1,17 +1,19 @@
 # Multi-Layer Perceptron (MLP), Convolutional Neural Network (CNN), and Recurrent Neural Network (RNN)
 
-Neural Networks are the foundation of modern machine learning, thus understanding the main types of architectures like **Multi-Layer Perceptron**, **Convolutional Neural Networks** and **Recurrent Neural Networks** are crucial. 
-
-In this project, I will explore these architectures from scratch, explaining how they work and to implement them in code, allowing for hands-on learning and quick and easy deployment of your model. 
-
-
-
 ## Table of Contents
 
 - [1. Multi-Layer Perceptron](#mlp)
 - [2. Convolutional Neural Network](#cnn) 
 - [3. Recurrent Neural Network](#rnn)
 - [Data](#data)
+
+
+
+Neural Networks are the foundation of modern machine learning, thus understanding the main types of architectures like **Multi-Layer Perceptron**, **Convolutional Neural Networks** and **Recurrent Neural Networks** are crucial. 
+
+In this project, I will explore these architectures from scratch, explaining how they work and to implement them in code, allowing for hands-on learning and quick and easy deployment of your model. 
+
+
 
 
 <a id="mlp"></a>
