@@ -52,13 +52,19 @@ Notes:
 ## 2. Convolutional Neural Network: MNIST-100 (0-99  digits) classification problem 
 [Try the CNN digit classifier here](https://huggingface.co/spaces/Eli181927/0-99_Classification)
 
-In this section we will be evaluating where the MLP will not be good enough and 
+In this section we will be evaluating where the MLP will not be good enough for this dataset and explain how and why implementing a Convolutional Neural Network performs better.
+
+For detailed explanation and implementation see the [CNN README](2.CNN/README.md) and the [training code](/2.CNN/training_torch.py).
+
 
 #### Simple explanation:
 - **Goal** – Scale the scratch-built approach to recognizing two-digit numbers.
 - **Dataset** – Paired-MNIST where two 28×28 digits are concatenated into 28×56 images for 00–99 labels.
-- **Implementation** – Stride-1 CNN with pooling, dropout, Adam, and auto-tuning to streamline training.
-- **Result** – Test accuracy 97.88% (10000 samples)
+- **Implementation** – Stride-1 CNN with pooling, dropout, Adam, and auto-tuning to streamline training. 
+
+Build from scratch in [training-100.py](/2.CNN/training-100.py) for practice but not reccomended to train without GPU. Use [training_torch.py](/2.CNN/training_torch.py) to run with Pytorch.
+
+- **Result** – Test accuracy 97.88% (on 10000 samples)
 
 #### CNN Quickstart
 
@@ -95,10 +101,9 @@ python app.py
 ```
 
 Notes:
-- **Data**: `2.CNN/setup_data.py` downloads MNIST and creates paired two-digit combinations (00-99), saving as `mnist_train.csv` and `mnist_test.csv` in `2.CNN/archive/`.
-- **Model file**: Training creates `2.CNN/archive/trained_model_mnist100.npz`, which the demo app loads automatically.
+- **Data**: 2.CNN/setup_data.py downloads MNIST and creates paired two-digit combinations (00-99), saving as mnist_train.csv and mnist_test.csv in 2.CNN/archive/.
+- **Model file**: Training creates 2.CNN/archive/trained_model_mnist100.npz, which the demo app loads automatically.
 
-For detailed implementation, explanation and results see the [CNN README](2.CNN/README.md)
 
 
 ## 3. Recurrent Neural Network: Hand drawn doodles classification.
