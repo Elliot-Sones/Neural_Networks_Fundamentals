@@ -109,11 +109,18 @@ Notes:
 ## 3. Recurrent Neural Network: Hand drawn doodles classification.
 [Try the RNN doodle classifier here](https://huggingface.co/spaces/Eli181927/animal_doodle_classifier)
 
+In this section we will be implementing a Recurrant Neural Network on hand drawn animal doodles. 
+
+The goal is to understand how to deal with sequential data and understand the limitation of conventional RNN's and how GRU and LSTM architechtures are much better for longer term memory. Then implementing GRU layers RNN for our doodle classifier.
+
+For detailed explanation and implementation, see the [RNN README](3.RNN/README.md) ad the [training coode](/3.RNN/training-doodle.py). 
+
+
 #### Simple explanation:
 - **Goal** – Classify hand-drawn doodles into 10 animal classes.
 - **Dataset** – Google Quick, Draw! stroke sequences (dx, dy, pen-lift).
-- **Implementation** – 2-layer bidirectional GRU with sequence packing, AdamW, dropout, label smoothing, and grad clipping.
-- **Result** – 188 779 test samples: 94.36% accuracy.
+- **Implementation** – 3-layer bidirectional GRU with sequence packing, AdamW, dropout, label smoothing, and gradient clipping.
+- **Result** – 94.36% accuracy (188 779 test samples)
 
 #### RNN Quickstart
 
@@ -141,7 +148,6 @@ python app.py
 ```
 
 Notes:
-- **Data**: `3.RNN/setup_data.py` downloads Quick Draw data for 10 animal classes and creates `animal_doodles_10_train.csv` and `animal_doodles_10_test.csv` in `3.RNN/archive/`.
-- **Model file**: Training creates `3.RNN/archive/rnn_animals_best.pt`, which the demo app loads automatically.
+- **Data**: 3.RNN/setup_data.py downloads Quick Draw data for 10 animal classes and creates animal_doodles_10_train.csv and animal_doodles_10_test.csv in 3.RNN/archive/.
+- **Model file**: Training creates 3.RNN/archive/rnn_animals_best.pt, which the demo app loads automatically.
 
-For detailed implementation and results, see the [RNN README](3.RNN/README.md)
