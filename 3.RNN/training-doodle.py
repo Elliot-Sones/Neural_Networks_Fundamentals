@@ -1,10 +1,17 @@
 """
-Section 1: This section manages imports, config, and device selection
+RNN Doodle Classifier - Training Script
+
+Trains a bidirectional GRU to classify Quick Draw doodles into 10 animal classes.
+Supports loading data from Hugging Face Datasets or local CSV.
+
+Usage:
+    python training-doodle.py              # Normal training
+    python training-doodle.py --lr_sweep   # LR range test (optional)
 """
-import os
+
+# === Imports ===
 import random
 import ast
-import math
 import json
 import time
 from pathlib import Path
@@ -18,20 +25,19 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 
+# === Device Selection ===
 
-# Using GPU if available, otherwise use CPU
 def get_device():
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    elif torch.cuda.is_available():
+    """Get the best available device (CUDA > MPS > CPU)."""
+    if torch.cuda.is_available():
         return torch.device("cuda")
-    else:
-        return torch.device("cpu")
+    elif torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
 
 
-# Set the seed for reproducibility within the epochs but not between epochs
 def set_seed(seed: int = 42):
-    import random
+    """Set random seeds for reproducibility."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -39,21 +45,36 @@ def set_seed(seed: int = 42):
         torch.cuda.manual_seed_all(seed)
 
 
+# === Configuration ===
 @dataclass
 class Config:
-# ones to sweep: lr, model capacity (hidden_size, num_layers), dropout,  regs (weight decay) , batch size, scheduler type 
-# on small dataset, then slwoly scale up to full dataset with DSP
+    """Training configuration. All hyperparameters in one place."""
     # ----------------------------
-    # Data paths and filtering
+    # Data source: Hugging Face or local CSV
+    # ----------------------------
+    use_hf_dataset: bool = True      # Use HF Datasets instead of local CSV
+    hf_dataset_name: str = "google/quickdraw"
+    hf_config: str = "preprocessed_simplified_drawings"
+    animals: List[str] = None        # Will be set in __post_init__
+    
+    # ----------------------------
+    # Data paths and filtering (for local CSV fallback)
     # ----------------------------
     csv_path: str = str((Path(__file__).resolve().parent / "archive" / "animal_doodles_10_train.csv"))
     recognized_only: bool = True
     min_seq_len: int = 6             # drop drawings with fewer than 6 moves
     max_len: int = 250               # cap sequence length for speed/memory (faster first run)
-    per_class_limit: int = 20000    # limit per class for faster training; scale up later 
+    per_class_limit: int = 0         # 0 = use ALL data (no limit) for full training
     # Optional class filtering controls
     allowed_classes: Optional[List[str]] = None
     num_classes_limit: Optional[int] = None
+    
+    def __post_init__(self):
+        if self.animals is None:
+            self.animals = [
+                "butterfly", "cow", "elephant", "giraffe", "monkey",
+                "octopus", "scorpion", "shark", "snake", "spider"
+            ]
 
     # ----------------------------
     # Dataset split
@@ -63,45 +84,45 @@ class Config:
     # ----------------------------
     # Batching and loading
     # ----------------------------
-    batch_size: int = 256             # the number of samples until one weight updates
-    num_workers: int = 4            # try 2 workers for faster loading on M2
+    batch_size: int = 512             # larger batch for GPU efficiency
+    num_workers: int = 8            # more workers for faster data loading
     n_buckets: int = 8               # length buckets for faster batches
     use_packing: bool = True         # if you see MPS issues, set to False
     log_interval: int = 100          # per-batch logging interval (set 1 during LR sweep)
-    grad_accum_steps: int = 3         # gradient accumulation steps (increase effective batch size)
+    grad_accum_steps: int = 4         # gradient accumulation (effective batch = 2048)
 
     # ----------------------------
     # Model architecture
     # ----------------------------
     input_size: int = 3              # [dx, dy, pen_lift]
-    hidden_size: int = 384          # the number of hidden units in the GRU
-    num_layers: int = 3             # the number of layers in the GRU
+    hidden_size: int = 512           # increased capacity for full dataset
+    num_layers: int = 3              # the number of layers in the GRU
     bidirectional: bool = True       # if True, the GRU is bidirectional    
 
     # ----------------------------
     # Regularization
     # ----------------------------
-    dropout: float = 0.3            # regularization 
+    dropout: float = 0.35            # increased regularization for larger model
     weight_decay: float = 1e-2       # L2 regularization 
-    label_smoothing: float = 0.05    # soften hard labels
+    label_smoothing: float = 0.1     # increased for better calibration
     grad_clip: float = 1.0           # gradient clipping to avoid exploding gradients
     
     # ----------------------------
     # Data augmentation (on-the-fly)
     # ----------------------------
-    aug_prob: float = 0.5            # probability to augment a sample
-    aug_rotate_deg: float = 20.0     # rotation (stddev, degrees) applied to deltas
+    aug_prob: float = 0.6            # increased augmentation probability
+    aug_rotate_deg: float = 25.0     # rotation (stddev, degrees) applied to deltas
     aug_scale_min: float = 0.85      # uniform scale lower bound (on deltas)
     aug_scale_max: float = 1.20      # uniform scale upper bound
-    aug_jitter_std: float = 0.01     # Gaussian noise std on dx,dy
-    aug_flip_prob: float = 0.0       # optional horizontal flip (negate dx)
+    aug_jitter_std: float = 0.02     # increased noise for robustness
+    aug_flip_prob: float = 0.3       # horizontal flip (good for symmetric animals)
 
     # ----------------------------
     # Optimization & training loop
     # ----------------------------
-    lr: float = 2e-3                 # learning rate
-    epochs: int = 15                # fewer epochs for quicker first pass
-    patience: int = 4                # earlier stop on plateau (if val doesnt improve for this amount of epochs, stop)
+    lr: float = 1e-3                 # lower lr for stability with larger model
+    epochs: int = 25                 # more epochs for full dataset
+    patience: int = 6                # more patience for convergence
     # LR sweep settings (range test)
     do_lr_sweep: bool = False
     lr_sweep_min: float = 1e-5
@@ -125,15 +146,14 @@ class Config:
     resume_from_best: bool = False
 
 
-"""
-Section 2: This is a helper function to parse the drawing string into a sequence of [dx, dy, pen_lift] 
-where dx and dy are the normmalized (-1, 1) movements of the pen from the previous point
-and pen_lift is 1 at the end of a stroke, else 0
-"""
+# === Sequence Parsing ===
 
 def parse_drawing_to_seq(drawing_str: str) -> np.ndarray:
-
-    # Prefer fast JSON parsing; fall back to ast for robustness
+    """
+    Convert drawing JSON to sequence of [dx, dy, pen_lift].
+    - dx, dy: normalized (-1, 1) pen movements
+    - pen_lift: 1 at end of stroke, 0 otherwise
+    """
     try:
         strokes = json.loads(drawing_str)
     except Exception:
@@ -170,9 +190,9 @@ def parse_drawing_to_seq(drawing_str: str) -> np.ndarray:
     seq[:, :2] = np.clip(seq[:, :2], -1.0, 1.0)
     return seq.astype(np.float32)
 
-"""
-Section 3: Prepare the data set for training. How to read one doodle and how to bundle them into batches.
-"""
+
+# === Datasets & Data Loading ===
+
 class SketchDataset(Dataset):
     def __init__(self, frame: pd.DataFrame, class_to_idx: dict, max_len: int, min_seq_len: int = 6):
         self.frame = frame.reset_index(drop=True)
@@ -419,10 +439,11 @@ def make_bucketed_batches(lengths: np.ndarray, batch_size: int, shuffle: bool = 
         rng.shuffle(batches)
     return batches
 
-"""
-Section 4: Gru classifier. It reads the sequence, form a memeory of the shape and then map the memory to a label
-"""
+
+# === Model Architecture ===
+
 class GRUClassifier(nn.Module):
+    """Bidirectional GRU classifier for sequence classification."""
     def __init__(self, input_size: int, hidden_size: int, num_layers: int,
                  bidirectional: bool, dropout: float, num_classes: int, use_packing: bool = True):
         super().__init__()
@@ -460,10 +481,11 @@ class GRUClassifier(nn.Module):
         logits = self.fc(h)
         return logits
 
-"""
-Section 5: Accuracy, training, evaluation and early stopping
-"""
+
+# === Training & Evaluation ===
+
 def topk_accuracy(logits: torch.Tensor, targets: torch.Tensor, ks=(1, 3)):
+    """Compute top-k accuracy for predictions."""
     maxk = max(ks)
     with torch.no_grad():
         _, pred = logits.topk(maxk, dim=1)
@@ -554,11 +576,75 @@ def evaluate(model, loader, device, label_smoothing=0.0):
         "acc3": total_top3 / total_count,
     }
 
-"""
-Section 6: Build splits, DataLoaders, model, and training driver
-"""
+
+# === Data Pipeline ===
+
+def load_hf_dataset(cfg: Config) -> Tuple[pd.DataFrame, List[str]]:
+    """Load Quick Draw data from Hugging Face Datasets.
+    
+    This streams data directly from HF Hub - no local download needed.
+    Filters to the 10 animal classes defined in cfg.animals.
+    """
+    try:
+        from datasets import load_dataset
+    except ImportError:
+        raise ImportError("Please install datasets: pip install datasets")
+    
+    print(f"Loading dataset from Hugging Face: {cfg.hf_dataset_name}/{cfg.hf_config}")
+    print(f"Filtering to classes: {cfg.animals}")
+    
+    # Load the dataset with simplified drawings (stroke coordinates)
+    ds = load_dataset(
+        cfg.hf_dataset_name,
+        cfg.hf_config,
+        split="train",
+        trust_remote_code=True,
+    )
+    
+    # Filter to our animal classes
+    animals_set = set(cfg.animals)
+    # The 'word' field in HF dataset is the class name
+    ds = ds.filter(
+        lambda x: x["word"] in animals_set,
+        num_proc=4,
+        desc="Filtering to animal classes"
+    )
+    
+    print(f"Loaded {len(ds)} samples from Hugging Face")
+    
+    # Convert to DataFrame format expected by the rest of the pipeline
+    # The HF dataset has 'drawing' as {'x': [[...], ...], 'y': [[...], ...]}
+    # We need to convert to JSON string format: [[[x1,x2,...], [y1,y2,...]], ...]
+    records = []
+    for sample in ds:
+        word = sample["word"]
+        drawing = sample["drawing"]
+        # Convert {x: [[...]], y: [[...]]} to [[[x], [y]], ...]
+        strokes = []
+        x_strokes = drawing["x"]
+        y_strokes = drawing["y"]
+        for xs, ys in zip(x_strokes, y_strokes):
+            strokes.append([list(xs), list(ys)])
+        records.append({
+            "word": word,
+            "drawing": json.dumps(strokes)
+        })
+    
+    df = pd.DataFrame(records)
+    classes = sorted(cfg.animals)
+    
+    print(f"Converted to DataFrame: {len(df)} samples, {len(classes)} classes")
+    return df, classes
+
 
 def build_frame_and_classes(cfg: Config) -> Tuple[pd.DataFrame, List[str]]:
+    """Load data from either HF Datasets or local CSV."""
+    
+    # Use Hugging Face Datasets if configured
+    if cfg.use_hf_dataset:
+        return load_hf_dataset(cfg)
+    
+    # Fallback to local CSV
     df = pd.read_csv(cfg.csv_path)
     if cfg.recognized_only and "recognized" in df.columns:
         df = df[df["recognized"] == True].reset_index(drop=True)
@@ -799,8 +885,12 @@ def run_training(cfg: Config):
     final_path = save_checkpoint(model, class_to_idx, cfg, best_metrics or {}, fname="rnn_animals_last.pt")
     print(f"Saved model to: {final_path}")
 
+# === LR Range Test (Optional) ===
+# Use --lr_sweep flag to run this instead of training.
+# Helps find optimal learning rate by sweeping from lr_sweep_min to lr_sweep_max.
 
 def _ensure_dirs(cfg: Config):
+    """Create output directories if needed."""
     Path(cfg.out_dir).mkdir(parents=True, exist_ok=True)
     Path(cfg.plots_dir).mkdir(parents=True, exist_ok=True)
 
