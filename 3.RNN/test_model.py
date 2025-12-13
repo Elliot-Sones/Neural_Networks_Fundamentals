@@ -188,8 +188,59 @@ def main():
 
     if not args.ckpt.exists():
         raise FileNotFoundError(f"Checkpoint not found at '{args.ckpt}'. Train or copy the model file first.")
+    
+    # If test CSV doesn't exist, create one by downloading from Google
     if not args.test_csv.exists():
-        raise FileNotFoundError(f"Test CSV not found at '{args.test_csv}'. Run data setup first.")
+        print(f"Test CSV not found. Downloading test samples from Google...")
+        import urllib.request
+        import urllib.parse
+        import json
+        
+        # Load checkpoint to get the animal classes
+        ckpt = torch.load(str(args.ckpt), map_location="cpu")
+        class_to_idx = ckpt["class_to_idx"]
+        animals = list(class_to_idx.keys())
+        
+        base_url = "https://storage.googleapis.com/quickdraw_dataset/full/simplified"
+        all_records = []
+        samples_per_class = 1000  # Use 1000 samples per class for testing
+        
+        for animal in animals:
+            encoded_name = urllib.parse.quote(animal)
+            url = f"{base_url}/{encoded_name}.ndjson"
+            print(f"  Downloading {animal}...")
+            try:
+                with urllib.request.urlopen(url, timeout=60) as response:
+                    content = response.read()
+                lines = content.decode('utf-8').strip().split('\n')
+                # Take last N samples (not used in training which took from beginning)
+                count = 0
+                for line in reversed(lines):
+                    if count >= samples_per_class:
+                        break
+                    if not line.strip():
+                        continue
+                    try:
+                        obj = json.loads(line)
+                        if not obj.get("recognized", True):
+                            continue
+                        drawing = obj.get("drawing", [])
+                        all_records.append({
+                            "word": animal,
+                            "drawing": json.dumps(drawing)
+                        })
+                        count += 1
+                    except:
+                        continue
+                print(f"    Loaded {count} test samples")
+            except Exception as e:
+                print(f"    Warning: Could not load {animal}: {e}")
+        
+        if all_records:
+            test_df = pd.DataFrame(all_records)
+            args.test_csv.parent.mkdir(parents=True, exist_ok=True)
+            test_df.to_csv(args.test_csv, index=False)
+            print(f"  Saved test CSV: {args.test_csv} ({len(test_df)} samples)")
 
     model, idx_to_class = load_model(args.ckpt)
     results = evaluate_on_csv(model, idx_to_class, args.test_csv, batch_size=args.batch_size)

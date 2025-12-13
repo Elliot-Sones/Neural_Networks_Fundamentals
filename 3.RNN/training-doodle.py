@@ -14,6 +14,8 @@ import random
 import ast
 import json
 import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Tuple, Optional
@@ -880,60 +882,62 @@ def evaluate(model, loader, device, label_smoothing=0.0):
 # === Data Pipeline ===
 
 def load_hf_dataset(cfg: Config) -> Tuple[pd.DataFrame, List[str]]:
-    """Load Quick Draw data from Hugging Face Datasets.
+    """Load Quick Draw data by downloading NDJSON files from Google's public storage.
     
-    This streams data directly from HF Hub - no local download needed.
-    Filters to the 10 animal classes defined in cfg.animals.
+    Downloads simplified drawing data directly from Google Cloud Storage.
+    Each file contains one drawing per line as JSON with stroke coordinates.
     """
-    try:
-        from datasets import load_dataset
-    except ImportError:
-        raise ImportError("Please install datasets: pip install datasets")
+    print(f"Downloading Quick Draw data for classes: {cfg.animals}")
     
-    print(f"Loading dataset from Hugging Face: {cfg.hf_dataset_name}/{cfg.hf_config}")
-    print(f"Filtering to classes: {cfg.animals}")
+    # Base URL for simplified drawings (stroke coordinates, not bitmaps)
+    base_url = "https://storage.googleapis.com/quickdraw_dataset/full/simplified"
     
-    # Load the dataset with simplified drawings (stroke coordinates)
-    ds = load_dataset(
-        cfg.hf_dataset_name,
-        cfg.hf_config,
-        split="train",
-        trust_remote_code=True,
-    )
+    all_records = []
     
-    # Filter to our animal classes
-    animals_set = set(cfg.animals)
-    # The 'word' field in HF dataset is the class name
-    ds = ds.filter(
-        lambda x: x["word"] in animals_set,
-        num_proc=4,
-        desc="Filtering to animal classes"
-    )
+    for animal in cfg.animals:
+        # URL encode the animal name (e.g., spaces become %20)
+        encoded_name = urllib.parse.quote(animal)
+        url = f"{base_url}/{encoded_name}.ndjson"
+        
+        print(f"  Downloading {animal}...")
+        try:
+            with urllib.request.urlopen(url, timeout=60) as response:
+                content = response.read()
+                
+            # Parse NDJSON (one JSON object per line)
+            lines = content.decode('utf-8').strip().split('\n')
+            count = 0
+            for line in lines:
+                if not line.strip():
+                    continue
+                try:
+                    obj = json.loads(line)
+                    # Only use recognized drawings for better quality
+                    if cfg.recognized_only and not obj.get("recognized", True):
+                        continue
+                    drawing = obj.get("drawing", [])
+                    all_records.append({
+                        "word": animal,
+                        "drawing": json.dumps(drawing)
+                    })
+                    count += 1
+                except json.JSONDecodeError:
+                    continue
+            print(f"    Loaded {count} samples")
+                    
+        except Exception as e:
+            print(f"    Warning: Could not load {animal}: {e}")
+            continue
     
-    print(f"Loaded {len(ds)} samples from Hugging Face")
+    if not all_records:
+        raise RuntimeError(
+            "Could not load any data. Check your internet connection or "
+            "download the data manually and use local CSV mode."
+        )
     
-    # Convert to DataFrame format expected by the rest of the pipeline
-    # The HF dataset has 'drawing' as {'x': [[...], ...], 'y': [[...], ...]}
-    # We need to convert to JSON string format: [[[x1,x2,...], [y1,y2,...]], ...]
-    records = []
-    for sample in ds:
-        word = sample["word"]
-        drawing = sample["drawing"]
-        # Convert {x: [[...]], y: [[...]]} to [[[x], [y]], ...]
-        strokes = []
-        x_strokes = drawing["x"]
-        y_strokes = drawing["y"]
-        for xs, ys in zip(x_strokes, y_strokes):
-            strokes.append([list(xs), list(ys)])
-        records.append({
-            "word": word,
-            "drawing": json.dumps(strokes)
-        })
-    
-    df = pd.DataFrame(records)
+    df = pd.DataFrame(all_records)
+    print(f"Loaded {len(df)} total samples across {len(cfg.animals)} classes")
     classes = sorted(cfg.animals)
-    
-    print(f"Converted to DataFrame: {len(df)} samples, {len(classes)} classes")
     return df, classes
 
 
