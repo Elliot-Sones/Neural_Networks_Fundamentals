@@ -118,6 +118,13 @@ class Config:
     aug_flip_prob: float = 0.3       # horizontal flip (good for symmetric animals)
 
     # ----------------------------
+    # Raster augmentation (simulates inference pipeline)
+    # ----------------------------
+    aug_raster_prob: float = 0.3     # probability of raster round-trip augmentation
+    aug_raster_res: int = 256        # resolution for raster rendering
+    aug_raster_stroke_width: int = 4 # stroke width when rendering to image
+
+    # ----------------------------
     # Optimization & training loop
     # ----------------------------
     lr: float = 1e-3                 # lower lr for stability with larger model
@@ -398,8 +405,289 @@ def _augment_seq_deltas(seq: np.ndarray, cfg: Config) -> np.ndarray:
     return out
 
 
+# === Raster Augmentation (Inference Pipeline Simulation) ===
+
+def _seq_to_absolute_strokes(seq: np.ndarray) -> List[Tuple[List[int], List[int]]]:
+    """Convert [dx, dy, pen_lift] sequence back to QuickDraw-style stroke coordinates.
+    
+    Returns list of (xs, ys) tuples representing individual strokes.
+    Coordinates are scaled to [0, 255] range.
+    """
+    if seq is None or seq.ndim != 2 or seq.shape[0] == 0:
+        return []
+    
+    strokes = []
+    current_stroke_x = [128]  # Start at center
+    current_stroke_y = [128]
+    
+    for i in range(seq.shape[0]):
+        dx, dy = seq[i, 0], seq[i, 1]
+        pen_lift = seq[i, 2] if seq.shape[1] > 2 else 0.0
+        
+        # Convert normalized delta back to pixel delta (training used /255.0)
+        px = int(round(dx * 255.0))
+        py = int(round(dy * 255.0))
+        
+        new_x = int(np.clip(current_stroke_x[-1] + px, 0, 255))
+        new_y = int(np.clip(current_stroke_y[-1] + py, 0, 255))
+        
+        current_stroke_x.append(new_x)
+        current_stroke_y.append(new_y)
+        
+        # If pen is lifted, end this stroke and start a new one
+        if pen_lift > 0.5:
+            if len(current_stroke_x) >= 2:
+                strokes.append((current_stroke_x.copy(), current_stroke_y.copy()))
+            current_stroke_x = [new_x]
+            current_stroke_y = [new_y]
+    
+    # Don't forget the last stroke
+    if len(current_stroke_x) >= 2:
+        strokes.append((current_stroke_x, current_stroke_y))
+    
+    return strokes
+
+
+def _render_strokes_to_image(strokes: List[Tuple[List[int], List[int]]], 
+                              size: int = 256, 
+                              stroke_width: int = 4) -> np.ndarray:
+    """Render QuickDraw strokes to a grayscale image.
+    
+    Args:
+        strokes: List of (xs, ys) tuples, each coordinate in [0, 255]
+        size: Output image size (square)
+        stroke_width: Width of drawn strokes
+        
+    Returns:
+        Grayscale image as uint8 numpy array, shape (size, size)
+    """
+    from PIL import Image, ImageDraw
+    
+    canvas = Image.new("L", (size, size), color=255)  # White background
+    draw = ImageDraw.Draw(canvas)
+    
+    scale = (size - 1) / 255.0
+    
+    for xs, ys in strokes:
+        if len(xs) < 2:
+            continue
+        points = [(int(round(x * scale)), int(round(y * scale))) for x, y in zip(xs, ys)]
+        draw.line(points, fill=0, width=stroke_width)
+    
+    return np.array(canvas, dtype=np.uint8)
+
+
+def _raster_to_strokes_via_skeleton(img: np.ndarray) -> List[Tuple[List[int], List[int]]]:
+    """Convert a raster image to strokes via skeletonization.
+    
+    This mirrors the inference pipeline in app.py to ensure training sees
+    the same stroke patterns the model will encounter at inference time.
+    
+    Args:
+        img: Grayscale image as uint8 numpy array, shape (H, W)
+        
+    Returns:
+        List of (xs, ys) tuples with coordinates in [0, 255]
+    """
+    try:
+        from skimage.morphology import skeletonize, remove_small_objects
+        from skimage.filters import threshold_otsu
+    except ImportError:
+        return []
+    
+    H, W = img.shape
+    if H == 0 or W == 0:
+        return []
+    
+    # Invert so strokes have high value
+    inv = 255 - img
+    
+    # Binarize
+    try:
+        thr_val = float(threshold_otsu(inv.astype(np.float32)))
+        mask = inv > max(8.0, thr_val * 0.85)
+    except Exception:
+        p90 = float(np.percentile(inv, 90))
+        thr = int(max(8.0, min(40.0, p90 * 0.20)))
+        mask = inv > thr
+    
+    # Remove small objects
+    min_size = max(16, (H * W) // 5000)
+    mask = remove_small_objects(mask.astype(bool), min_size=min_size)
+    if not np.any(mask):
+        return []
+    
+    # Skeletonize to 1-pixel width
+    skel = skeletonize(mask).astype(np.uint8)
+    
+    # Trace skeleton to extract strokes
+    def neighbors(y: int, x: int):
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                if dy == 0 and dx == 0:
+                    continue
+                ny, nx = y + dy, x + dx
+                if 0 <= ny < H and 0 <= nx < W:
+                    yield ny, nx
+    
+    def neighbor_count(y: int, x: int) -> int:
+        return sum(1 for ny, nx in neighbors(y, x) if skel[ny, nx])
+    
+    visited = np.zeros_like(skel, dtype=bool)
+    strokes = []
+    
+    # Get all skeleton pixels
+    ys, xs = np.where(skel > 0)
+    pixels = list(zip(map(int, ys.tolist()), map(int, xs.tolist())))
+    
+    for (sy, sx) in pixels:
+        if visited[sy, sx] or skel[sy, sx] == 0:
+            continue
+        
+        # Find a starting point (prefer endpoints)
+        start = (sy, sx)
+        if neighbor_count(sy, sx) > 1:
+            for (yy, xx) in pixels:
+                if not visited[yy, xx] and skel[yy, xx] and neighbor_count(yy, xx) <= 1:
+                    start = (yy, xx)
+                    break
+        
+        # Trace the path
+        path = []
+        prev = None
+        cy, cx = start
+        while True:
+            if visited[cy, cx]:
+                break
+            visited[cy, cx] = True
+            path.append((cy, cx))
+            
+            candidates = [(ny, nx) for ny, nx in neighbors(cy, cx) 
+                         if skel[ny, nx] and not visited[ny, nx]]
+            if not candidates:
+                break
+            
+            if prev is None:
+                ny, nx = candidates[0]
+            else:
+                # Choose neighbor most aligned with current direction
+                vy, vx = cy - prev[0], cx - prev[1]
+                best = candidates[0]
+                best_dot = -1e9
+                for (ay, ax) in candidates:
+                    dot = (ay - cy) * vy + (ax - cx) * vx
+                    if dot > best_dot:
+                        best_dot = dot
+                        best = (ay, ax)
+                ny, nx = best
+            
+            prev = (cy, cx)
+            cy, cx = ny, nx
+        
+        if len(path) < 2:
+            continue
+        
+        # Downsample long paths
+        max_points = 200
+        step = max(1, len(path) // max_points)
+        sampled = path[::step]
+        if sampled[-1] != path[-1]:
+            sampled.append(path[-1])
+        
+        # Convert to [0, 255] coordinates
+        xs_out = [int(round(xx / max(1, W - 1) * 255.0)) for (yy, xx) in sampled]
+        ys_out = [int(round(yy / max(1, H - 1) * 255.0)) for (yy, xx) in sampled]
+        strokes.append((xs_out, ys_out))
+    
+    return strokes
+
+
+def _calibrate_seq_for_train(seq: np.ndarray, 
+                              target_mean: float = 0.04,
+                              max_gain: float = 12.0,
+                              min_gain: float = 0.5) -> np.ndarray:
+    """Scale (dx, dy) so the mean step magnitude matches target_mean.
+    
+    This matches the calibration in app.py inference pipeline.
+    """
+    if seq is None or seq.ndim != 2 or seq.shape[1] < 2 or seq.shape[0] == 0:
+        return np.zeros((0, 3), dtype=np.float32)
+    
+    steps = np.sqrt((seq[:, 0] ** 2) + (seq[:, 1] ** 2))
+    curr = float(steps.mean()) if steps.size else 0.0
+    if curr <= 1e-6:
+        return seq.astype(np.float32)
+    
+    gain = float(np.clip(target_mean / curr, min_gain, max_gain))
+    out = seq.astype(np.float32).copy()
+    out[:, 0:2] = np.clip(out[:, 0:2] * gain, -1.0, 1.0)
+    return out
+
+
+def _augment_raster(seq: np.ndarray, cfg: Config) -> np.ndarray:
+    """Apply raster round-trip augmentation.
+    
+    Simulates the inference pipeline:
+    1. Convert delta sequence to absolute stroke coordinates
+    2. Render strokes to a raster image
+    3. Skeletonize the raster
+    4. Re-extract strokes from skeleton
+    5. Convert back to delta sequence
+    6. Apply calibration (same as inference)
+    
+    This teaches the model to recognize stroke patterns from skeletonized rasters.
+    """
+    if seq is None or seq.ndim != 2 or seq.shape[0] < 6:
+        return seq
+    
+    try:
+        # Step 1: Convert to absolute strokes
+        strokes = _seq_to_absolute_strokes(seq)
+        if not strokes:
+            return seq
+        
+        # Step 2: Render to image
+        img = _render_strokes_to_image(
+            strokes, 
+            size=int(cfg.aug_raster_res), 
+            stroke_width=int(cfg.aug_raster_stroke_width)
+        )
+        
+        # Step 3 & 4: Skeletonize and re-extract
+        new_strokes = _raster_to_strokes_via_skeleton(img)
+        if not new_strokes:
+            return seq  # Fallback to original if extraction fails
+        
+        # Step 5: Convert back to delta sequence
+        # Build QuickDraw format for parsing
+        qd_strokes = [[xs, ys] for xs, ys in new_strokes]
+        import json
+        new_seq = parse_drawing_to_seq(json.dumps(qd_strokes))
+        
+        if new_seq.shape[0] < 6:
+            return seq  # Fallback if too short
+        
+        # Step 6: Apply calibration
+        new_seq = _calibrate_seq_for_train(new_seq)
+        
+        # Cap length to match training config
+        if new_seq.shape[0] > cfg.max_len:
+            step = int(np.ceil(new_seq.shape[0] / float(cfg.max_len)))
+            new_seq = new_seq[::step][:cfg.max_len]
+        
+        return new_seq.astype(np.float32)
+        
+    except Exception:
+        return seq  # Fallback on any error
+
+
 class AugmentingDataset(Dataset):
-    """Wrap a base dataset and apply on-the-fly delta-space augmentation."""
+    """Wrap a base dataset and apply on-the-fly augmentation.
+    
+    Applies two types of augmentation:
+    1. Raster round-trip (aug_raster_prob): Simulates inference pipeline
+    2. Geometric (aug_prob): Rotation, scale, flip, jitter
+    """
     def __init__(self, base: Dataset, cfg: Config):
         self.base = base
         self.cfg = cfg
@@ -409,12 +697,24 @@ class AugmentingDataset(Dataset):
 
     def __getitem__(self, idx: int):
         seq, label = self.base[idx]
+        
+        # Apply raster augmentation first (simulates inference pipeline)
+        # This is applied independently of geometric augmentation
+        if float(self.cfg.aug_raster_prob) > 0 and np.random.rand() < float(self.cfg.aug_raster_prob):
+            try:
+                seq = _augment_raster(seq, self.cfg)
+            except Exception:
+                pass
+        
+        # Apply geometric augmentation (rotation, scale, flip, jitter)
         if float(self.cfg.aug_prob) > 0 and np.random.rand() < float(self.cfg.aug_prob):
             try:
                 seq = _augment_seq_deltas(seq, self.cfg)
             except Exception:
                 pass
+        
         return seq, label
+
 
 class ListBatchSampler:
     def __init__(self, batches: List[List[int]]):
