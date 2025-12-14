@@ -72,6 +72,7 @@ Notes:
 
 <a id="cnn"></a>
 ## 2. Convolutional Neural Network: MNIST-100 (0–99 Digits) Classification Problem 
+<img src="CNN.gif" width="400">
 [Try the CNN digit classifier here](https://huggingface.co/spaces/Eli181927/0-99_Classification)
 
 | <img src="2.CNN/assets/CNN_explanation/cnn.jpeg" width="400" alt="Accuracy"> | <img src="2.CNN/assets/CNN_explanation/dataset-cover.png" width="400" alt="Loss"> |
