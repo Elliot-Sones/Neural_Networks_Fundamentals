@@ -2,7 +2,7 @@
 **Goal:** Use a Recurrent Neural Network to accurately classify doodles.
 **Input data:** Quick Draw doodles.
 
-#### [Try out the demo for yourself](https://huggingface.co/spaces/Eli181927/animal_doodle_classifier)
+#### [Try out the demo for yourself](https://huggingface.co/spaces/Eli181927/Classification-doodle-RNN)
 
 ## Weights
 Model weights and cached arrays are not tracked in this GitHub repo. To run the demo locally, either:
@@ -93,7 +93,6 @@ Epoch 15 | train_loss=0.3095 train_acc1=1.000 val_loss=0.3140 val_acc1=0.909 val
 <img src="assets/plots/rnn_reliability.png" alt="Reliability diagram" width="300"/>
 
 <img src="assets/plots/rnn_confidence_hist.png" alt="Confidence histogram" width="300"/>
-
 
 
 
