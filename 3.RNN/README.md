@@ -4,6 +4,11 @@
 
 #### [Try out the demo for yourself](https://huggingface.co/spaces/Eli181927/animal_doodle_classifier)
 
+## Weights
+Model weights and cached arrays are not tracked in this GitHub repo. To run the demo locally, either:
+- Train your own checkpoint with `training-doodle.py` (writes to `3.RNN/archive/`), or
+- Download the checkpoint from the Hugging Face Space and place it under `3.RNN/archive/` (e.g. `rnn_animals_best.pt`).
+
 ## Recurrent Neural Networks
 [Simple to follow explanation of RNN](https://www.youtube.com/watch?v=AsNTP8Kwu80) 
 
@@ -88,7 +93,6 @@ Epoch 15 | train_loss=0.3095 train_acc1=1.000 val_loss=0.3140 val_acc1=0.909 val
 <img src="assets/plots/rnn_reliability.png" alt="Reliability diagram" width="300"/>
 
 <img src="assets/plots/rnn_confidence_hist.png" alt="Confidence histogram" width="300"/>
-
 
 
 

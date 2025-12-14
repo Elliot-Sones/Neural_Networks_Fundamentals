@@ -1,3 +1,5 @@
+# Version 1
+
 import json
 from pathlib import Path
 import random
@@ -8,15 +10,15 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw
 
-APP_VERSION = "rnn-app v0.5 (train-compare + tuning constants)"
-# Visual canvas size (pixels). Large for near full-screen.
-DISPLAY_CANVAS_SIZE = 1024
+APP_VERSION = "rnn-app v0.6 (opt canvas + predict fix)"
+# Visual canvas size (pixels). Adjusted to 512 to match training feel and performance.
+DISPLAY_CANVAS_SIZE = 512
 # Internal working resolution for vectorization to keep accuracy stable
 # regardless of display size and to bound compute.
 WORK_RES = 800
 
 # Sketchpad defaults (hardcoded for easy tweaking)
-SKETCH_BRUSH_SIZE = 8  # pixels
+SKETCH_BRUSH_SIZE = 4  # pixels
 # Note: Gradio Sketchpad may not expose opacity directly. Raster thresholding below
 # makes light strokes still work; adjust BIN_OTSU_FUDGE/BIN_P90_FACTOR if needed.
 
@@ -203,8 +205,9 @@ def _prepare_sequence(input_obj: Any) -> np.ndarray:
         try:
             seq = parse_drawing_to_seq(json.dumps(strokes))
             seq = _limit_len(seq)
-            return _calibrate_seq(seq)
-        except Exception:
+            calibrated = _calibrate_seq(seq)
+            return calibrated
+        except Exception as e:
             return np.zeros((0, 3), dtype=np.float32)
 
     # Direct raster object
@@ -343,7 +346,11 @@ def _raster_to_quickdraw_strokes(img_input: Any) -> List[List[List[int]]]:
     elif isinstance(img_input, _np.ndarray):
         arr = img_input
         if arr.ndim == 3 and arr.shape[2] == 4:
-            img = Image.fromarray(arr.astype(_np.uint8), mode="RGBA").convert("RGB")
+            # RGBA: composite onto white background to handle transparency correctly
+            rgba_img = Image.fromarray(arr.astype(_np.uint8), mode="RGBA")
+            white_bg = Image.new("RGB", rgba_img.size, (255, 255, 255))
+            white_bg.paste(rgba_img, mask=rgba_img.split()[3])  # Use alpha channel as mask
+            img = white_bg
         elif arr.ndim == 3 and arr.shape[2] == 3:
             img = Image.fromarray(arr.astype(_np.uint8), mode="RGB")
         else:
@@ -377,8 +384,11 @@ def _raster_to_quickdraw_strokes(img_input: Any) -> List[List[List[int]]]:
     if H == 0 or W == 0:
         return []
 
+    # DEBUG: Check if image has any non-white pixels (strokes)
+
     # Invert so strokes have high value; robust binary threshold
     inv = 255 - gray
+    
     try:
         thr_val = float(threshold_otsu(inv.astype(_np.float32)))
         mask = inv > max(8.0, thr_val * BIN_OTSU_FUDGE)
@@ -747,8 +757,14 @@ class RNNPredictor:
 
 
 def build_ui() -> gr.Blocks:
-    predictor = RNNPredictor()
-    MIN_CONF = predictor.conf_threshold
+    predictor: Optional[RNNPredictor] = None
+    load_error: Optional[str] = None
+    try:
+        predictor = RNNPredictor()
+        MIN_CONF = predictor.conf_threshold
+    except Exception as e:
+        load_error = str(e)
+        MIN_CONF = 0.8
 
     with gr.Blocks(title="RNN Doodle Classifier (10 classes)") as demo:
         gr.Markdown("""
@@ -759,11 +775,23 @@ def build_ui() -> gr.Blocks:
         """)
         gr.Markdown(f"Build: {APP_VERSION}")
 
+        if load_error is not None or predictor is None:
+            gr.Markdown(
+                "## Model checkpoint missing\n"
+                "This demo needs `rnn_animals_best.pt` (or `rnn_animals_last.pt`) under `3.RNN/archive/`.\n\n"
+                "Options:\n"
+                "- Train locally via `3.RNN/training-doodle.py` (writes to `3.RNN/archive/`), or\n"
+                "- Download the checkpoint from the Hugging Face Space and place it in `3.RNN/archive/`, or\n"
+                "- Set `RNN_CKPT_PATH` to an existing checkpoint file.\n\n"
+                f"Error: `{load_error}`"
+            )
+            return demo
+
         # Use built-in Sketchpad as the default canvas (large display size).
         # Internal processing always rescales to WORK_RES, so accuracy is unchanged.
         input_component = gr.Sketchpad(
             label="Draw here",
-            brush=SKETCH_BRUSH_SIZE,
+            brush=gr.Brush(default_size=SKETCH_BRUSH_SIZE, colors=["#000000"], color_mode="fixed"),
             type="numpy",
             width=DISPLAY_CANVAS_SIZE,
             height=DISPLAY_CANVAS_SIZE,
@@ -954,6 +982,7 @@ def build_ui() -> gr.Blocks:
             _predict_fn,
             inputs=[input_component, target_state, score_state, attempts_state, auto_next],
             outputs=[status, label, diag_text, diag_mask, diag_skel, diag_path, diag_train_target, diag_train_pred, target_md, score_md, target_state, score_state, attempts_state, input_component],
+            trigger_mode="always_last"
         )
         # Some Spaces/Gradio versions emit edits via `.edit` instead of `.change`.
         # Hook both to be safe (idempotent since we update full outputs each call).
@@ -962,6 +991,7 @@ def build_ui() -> gr.Blocks:
                 _predict_fn,
                 inputs=[input_component, target_state, score_state, attempts_state, auto_next],
                 outputs=[status, label, diag_text, diag_mask, diag_skel, diag_path, diag_train_target, diag_train_pred, target_md, score_md, target_state, score_state, attempts_state, input_component],
+                trigger_mode="always_last"
             )
 
         # Provide a manual predict button as well
