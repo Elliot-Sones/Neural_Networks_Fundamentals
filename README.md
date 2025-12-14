@@ -139,6 +139,7 @@ Notes:
 
 <a id="rnn"></a>
 ## 3. Recurrent Neural Network: Hand-Drawn Doodles Classification
+<img src="Doodle.gif" width="400">
 [Try the RNN doodle classifier here](https://huggingface.co/spaces/Eli181927/Classification-doodle-RNN)
 
 | <img src="3.RNN/assets/RNN.png" width="400" alt="Accuracy"> | <img src="3.RNN/assets/data.png" width="400" alt="Loss"> |
