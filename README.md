@@ -19,7 +19,7 @@
 | 1 | **Multi-Layer Perceptron** | MNIST digit classification (0-9) | 97%+ | [Try it](https://huggingface.co/spaces/Eli181927/elliot_digit_classifier/) |
 | 2 | **Convolutional Neural Network** | Two-digit classification (0-99) | 97.88% | [Try it](https://huggingface.co/spaces/Eli181927/0-99_Classification) |
 | 3 | **Recurrent Neural Network** | Doodle classification (10 animals) | 94.36% | [Try it](https://huggingface.co/spaces/Eli181927/Classification-doodle-RNN) |
-| 4 | **Transformers** | Emotion, Shakespeare, EN→FR translation | — | [Try it](https://huggingface.co/spaces/Eli181927/Transformer_Demo) |
+| 4 | **Transformers** | Emotion, Shakespeare, EN→FR translation | ~92% | [Try it](https://huggingface.co/spaces/Eli181927/Transformer_Demo) |
 
 Every model is implemented from first principles — no high-level ML wrappers — so you can see exactly how each algorithm works.
 
