@@ -1,221 +1,265 @@
-# Multi-Layer Perceptron (MLP), Convolutional Neural Network (CNN), and Recurrent Neural Network (RNN)
+<p align="center">
+  <h1 align="center">Neural Networks Fundamentals</h1>
+  <p align="center"><em>From neurons to transformers — building every major architecture from scratch</em></p>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/PyTorch-2.0+-ee4c2c?logo=pytorch&logoColor=white" alt="PyTorch">
+  <img src="https://img.shields.io/badge/NumPy-1.24+-013243?logo=numpy&logoColor=white" alt="NumPy">
+  <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
+</p>
+
+---
+
+## Overview
+
+| # | Architecture | Task | Accuracy | Demo |
+|---|---|---|---|---|
+| 1 | **Multi-Layer Perceptron** | MNIST digit classification (0-9) | 97%+ | [Try it](https://huggingface.co/spaces/Eli181927/elliot_digit_classifier/) |
+| 2 | **Convolutional Neural Network** | Two-digit classification (0-99) | 97.88% | [Try it](https://huggingface.co/spaces/Eli181927/0-99_Classification) |
+| 3 | **Recurrent Neural Network** | Doodle classification (10 animals) | 94.36% | [Try it](https://huggingface.co/spaces/Eli181927/Classification-doodle-RNN) |
+| 4 | **Transformers** | Emotion, Shakespeare, EN→FR translation | — | [Try it](https://huggingface.co/spaces/Eli181927/Transformer_Demo) |
+
+Every model is implemented from first principles — no high-level ML wrappers — so you can see exactly how each algorithm works.
+
+---
 
 ## Table of Contents
 
-- [1. Multi-Layer Perceptron](#mlp)
-- [2. Convolutional Neural Network](#cnn) 
-- [3. Recurrent Neural Network](#rnn)
+- [1. Multi-Layer Perceptron](#1-multi-layer-perceptron)
+- [2. Convolutional Neural Network](#2-convolutional-neural-network)
+- [3. Recurrent Neural Network](#3-recurrent-neural-network)
+- [4. Transformers](#4-transformers)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
 - [Data](#data)
 
+---
 
+## 1. Multi-Layer Perceptron
 
-Neural Networks are the foundation of modern machine learning, thus understanding the main types of architectures like **Multi-Layer Perceptron**, **Convolutional Neural Networks** and **Recurrent Neural Networks** are crucial. 
+<img src="MLP.gif" width="420">
 
-In this project, I will explore these architectures from scratch, explaining how they work and to implement them in code, allowing for hands-on learning and quick and easy deployment of your model. 
+[Try the MLP digit classifier](https://huggingface.co/spaces/Eli181927/elliot_digit_classifier/) · [README](1.MLP/README.md) · [Training code](1.MLP/training.py)
 
-
-
-
-<a id="mlp"></a>
-## 1. Multi-Layer Perceptron: MNIST Classification Problem
-<img src="MLP.gif" width="400">
-
-[Try the MLP digit classifier Demo here](https://huggingface.co/spaces/Eli181927/elliot_digit_classifier/)
-
-| <img src="1.MLP/assets/mlp.png" width="400" alt="Accuracy"> | <img src="1.MLP/assets/digit.png" width="300" alt="Loss"> |
+| | |
 |---|---|
-| Multi-Layer Perceotron| MNIST Dataset Image|
+| <img src="1.MLP/assets/mlp.png" width="350" alt="MLP architecture"> | <img src="1.MLP/assets/digit.png" width="250" alt="MNIST digit"> |
+| Multi-Layer Perceptron | MNIST Dataset |
 
-In this section I will be explaining how to implement a Multi-Layer Perceptron from scratch (no libraries) to solve the MNIST digit classification problem.
-
-For detailed explanation and implementation, see the [MLP README](1.MLP/README.md) and the [training code](1.MLP/training.py). 
-
-#### MNIST Classification Problem
-- **Goal** – Accurately predict hand-drawn digits in production. 
-- **Dataset** – MNIST 28×28 pixel images (60k train / 10k test grayscale digits).
-- **Implementation** – 4-layer ReLU MLP trained with Adam, He initialization, and L2 regularization.
-- **Result** – About 97% accuracy on test set 
-
-#### MLP Quickstart
+- **Goal** — Accurately predict hand-drawn digits in production
+- **Dataset** — MNIST 28×28 grayscale images (60k train / 10k test)
+- **Architecture** — 784 → 256 → 128 → 10 with ReLU, Adam, He init, L2 regularization
+- **Result** — 97%+ test accuracy
 
 <details>
-<summary>Show MLP Quickstart</summary>
-
-Minimal steps to download data, train, test, and run the app.
+<summary>MLP Quickstart</summary>
 
 ```bash
-# 1) Navigate to project folder and create virtual env
 cd 1.MLP
 python -m venv .venv && source .venv/bin/activate
-
-# 2) Install deps for the MLP
 pip install -r requirements.txt
-
-# 3) Download MNIST and prepare CSVs (writes to archive)
-python setup_data.py
-
-# 4) Train (saves model to archive/trained_model.npz)
-python training.py
-
-# 5) Evaluate on test set
-python test_model.py
-
-# 6) Optional: launch the local demo UI
-python app.py
+python setup_data.py            # download MNIST
+python training.py              # train → archive/trained_model.npz
+python test_model.py            # evaluate
+python app.py                   # launch demo
 ```
 
 </details>
 
-Notes:
-- **Data**: 1.MLP/setup_data.py pulls MNIST from a reliable mirror and writes 'mnist_train.csv' and 'mnist_test.csv' under 1.MLP/archive in the exact format expected by training.py and test_model.py.
-- **Model file**: Training creates 1.MLP/archive/trained_model.npz, which the demo app loads automatically.
+---
 
+## 2. Convolutional Neural Network
 
+<img src="CNN.gif" width="420">
 
-<a id="cnn"></a>
-## 2. Convolutional Neural Network: MNIST-100 (0–99 Digits) Classification Problem 
-<img src="CNN.gif" width="400">
+[Try the CNN classifier](https://huggingface.co/spaces/Eli181927/0-99_Classification) · [README](2.CNN/README.md) · [Training code](2.CNN/training_torch.py)
 
-[Try the CNN digit classifier here](https://huggingface.co/spaces/Eli181927/0-99_Classification)
-
-| <img src="2.CNN/assets/CNN_explanation/cnn.jpeg" width="400" alt="Accuracy"> | <img src="2.CNN/assets/CNN_explanation/dataset-cover.png" width="400" alt="Loss"> |
+| | |
 |---|---|
-| Convolutional Neural Network| MNIST-100 Dataset Image|
+| <img src="2.CNN/assets/CNN_explanation/cnn.jpeg" width="350" alt="CNN architecture"> | <img src="2.CNN/assets/CNN_explanation/dataset-cover.png" width="350" alt="MNIST-100 dataset"> |
+| Convolutional Neural Network | MNIST-100 Dataset |
 
-In this section we will be evaluating where the MLP will not be good enough for this dataset and explain how and why implementing a Convolutional Neural Network performs better.
-
-For detailed explanation and implementation see the [CNN README](2.CNN/README.md) and the [training code](2.CNN/training_torch.py).
-
-
-#### Simple Explanation
-- **Goal** – Scale the scratch-built approach to recognizing two-digit numbers.
-- **Dataset** – Paired-MNIST where two 28×28 digits are concatenated into 28×56 images for 00–99 labels.
-- **Implementation** – Stride-1 CNN with pooling, dropout, Adam, and auto-tuning to streamline training. 
-
-Build from scratch in [training-100.py](2.CNN/training-100.py) for practice but not recommended to train without GPU. Use [training_torch.py](2.CNN/training_torch.py) to run with PyTorch.
-
-- **Result** – Test accuracy 97.88% (on 10,000 samples)
-
-#### CNN Quickstart
+- **Goal** — Scale digit recognition to two-digit numbers (0-99)
+- **Dataset** — Paired-MNIST 28×56 images (concatenated digits, 00-99 labels)
+- **Architecture** — Conv(3×3,16) → ReLU → MaxPool → Conv(3×3,32) → ReLU → MaxPool → FC(256) → FC(100)
+- **Result** — 97.88% test accuracy (10,000 samples)
 
 <details>
-<summary>Show CNN Quickstart</summary>
-
-Minimal steps to download data, train, test, and run the app.
-
-Two options:
-
-1) From-scratch (GPU recommended)
+<summary>CNN Quickstart</summary>
 
 ```bash
 cd 2.CNN
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python setup_data.py
+
+# Option A: From-scratch NumPy (GPU recommended)
 python training-100.py --epochs 20 --batch-size 256
-```
 
-2) Libraries (fast on CPU)
-
-```bash
-cd 2.CNN
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python setup_data.py
+# Option B: PyTorch (fast on CPU)
 python training_torch.py --epochs 20 --batch-size 256 --device cpu
-```
 
-Evaluate and run the app:
-
-```bash
-cd 2.CNN
-python test_model.py
-python app.py
+python test_model.py            # evaluate
+python app.py                   # launch demo
 ```
 
 </details>
 
-Notes:
-- **Data**: 2.CNN/setup_data.py downloads MNIST and creates paired two-digit combinations (00–99), saving as mnist_train.csv and mnist_test.csv in 2.CNN/archive/.
-- **Model file**: Training creates 2.CNN/archive/trained_model_mnist100.npz, which the demo app loads automatically.
+---
 
+## 3. Recurrent Neural Network
 
+<img src="Doodle.gif" width="420">
 
-<a id="rnn"></a>
-## 3. Recurrent Neural Network: Hand-Drawn Doodles Classification
-<img src="Doodle.gif" width="400">
+[Try the RNN doodle classifier](https://huggingface.co/spaces/Eli181927/Classification-doodle-RNN) · [README](3.RNN/README.md) · [Training code](3.RNN/training-doodle.py)
 
-[Try the RNN doodle classifier here](https://huggingface.co/spaces/Eli181927/Classification-doodle-RNN)
-
-| <img src="3.RNN/assets/RNN.png" width="400" alt="Accuracy"> | <img src="3.RNN/assets/data.png" width="400" alt="Loss"> |
+| | |
 |---|---|
-| Recurrant Neural Network| Animal Doodle Dataset Image|
+| <img src="3.RNN/assets/RNN.png" width="350" alt="RNN architecture"> | <img src="3.RNN/assets/data.png" width="350" alt="Doodle data"> |
+| Recurrent Neural Network | Animal Doodle Dataset |
 
-In this section we will be implementing a Recurrent Neural Network on hand-drawn animal doodles. 
-
-The goal is to understand how to deal with sequential data and understand the limitation of conventional RNNs and how GRU and LSTM architectures are much better for longer term memory. Then implementing GRU layers RNN for our doodle classifier.
-
-For detailed explanation and implementation, see the [RNN README](3.RNN/README.md) and the [training code](3.RNN/training-doodle.py). 
-
-
-#### Simple Explanation
-- **Goal** – Classify hand-drawn doodles into 10 animal classes.
-- **Dataset** – Google Quick, Draw! stroke sequences (dx, dy, pen-lift).
-- **Implementation** – 3-layer bidirectional GRU with sequence packing, AdamW, dropout, label smoothing, and gradient clipping.
-- **Result** – 94.36% accuracy (188,779 test samples)
-
-#### RNN Quickstart
+- **Goal** — Classify hand-drawn doodles into 10 animal classes
+- **Dataset** — Google Quick, Draw! stroke sequences (dx, dy, pen-lift)
+- **Architecture** — 2-layer bidirectional GRU (hidden 192), AdamW, label smoothing, dropout
+- **Result** — 94.36% top-1 accuracy (188,779 test samples)
 
 <details>
-<summary>Show RNN Quickstart</summary>
-
-Minimal steps to download data, train, test, and run the app.
+<summary>RNN Quickstart</summary>
 
 ```bash
-# 1) Navigate to project folder and create virtual env
 cd 3.RNN
 python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python setup_data.py            # download Quick, Draw! data
+python training-doodle.py       # train → archive/rnn_animals_best.pt
+python eval_and_plots.py        # evaluate + generate plots
+python app.py                   # launch demo
+```
 
-# 2) Install deps for the RNN
+</details>
+
+---
+
+## 4. Transformers
+
+<table align="center">
+  <tr>
+    <td align="center" width="50%">
+      <img src="Encoder.gif" width="100%">
+      <br>Emotion Analysis (Encoder)
+    </td>
+    <td align="center" width="50%">
+      <img src="Decoder.gif" width="100%">
+      <br>Shakespeare Generator (Decoder)
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="Machine_Translation.gif" width="60%">
+  <br>Machine Translation EN→FR (Seq2Seq)
+</p>
+
+[Try the Transformer Demo](https://huggingface.co/spaces/Eli181927/Transformer_Demo) · [README](4.Transformers/README.md)
+
+A from-scratch implementation of the Transformer architecture from ["Attention Is All You Need"](https://arxiv.org/abs/1706.03762), split into three progressively complex projects:
+
+| Sub-project | Architecture | Task | Training code |
+|---|---|---|---|
+| **Encoder** | Encoder-only | 6-class emotion classification + masked language modeling | [sentiment/train.py](4.Transformers/encoder_transformer/sentiment/train.py) |
+| **Decoder** | Decoder-only (GPT) | Character-level Shakespeare generation | [training.py](4.Transformers/decoder_transformer/training.py) |
+| **Machine Translation** | Full Seq2Seq | English → French translation | [train_mini.py](4.Transformers/machine_translation/train_mini.py) |
+
+<details>
+<summary>Transformer Quickstart</summary>
+
+```bash
+cd 4.Transformers
 pip install -r requirements.txt
 
-# 3) Download Quick, Draw! dataset and prepare splits (writes to archive)
-python setup_data.py
+# Encoder: Masked Language Model
+python encoder_transformer/mlm/train.py
 
-# 4) Train (saves model to archive/rnn_animals_best.pt)
-python training-doodle.py
+# Decoder: Shakespeare language model
+python decoder_transformer/training.py
 
-# 5) Evaluate on test set and generate plots
-python eval_and_plots.py
+# Machine Translation: EN→FR
+python machine_translation/setup_data.py --dataset wmt14 --out_dir data/en_fr
+python machine_translation/train_mini.py --train_csv data/en_fr/train.csv --val_csv data/en_fr/test.csv
 
-# 6) Optional: launch the local demo UI
+# Launch 3-tab Gradio demo
 python app.py
 ```
 
 </details>
 
-Notes:
-- **Data**: 3.RNN/setup_data.py downloads Quick, Draw! data for 10 animal classes and creates animal_doodles_10_train.csv and animal_doodles_10_test.csv in 3.RNN/archive/.
-- **Model file**: Training creates 3.RNN/archive/rnn_animals_best.pt, which the demo app loads automatically.
+---
 
-<a id="data"></a>
+## Project Structure
+
+```
+Neural_Networks_Fundamentals/
+├── README.md
+├── requirements.txt
+├── .gitignore
+├── MLP.gif, CNN.gif, Doodle.gif
+├── Encoder.gif, Decoder.gif, Machine_Translation.gif
+│
+├── 1.MLP/                          # Pure-NumPy MLP
+│   ├── training.py, app.py, test_model.py, setup_data.py
+│   └── assets/
+│
+├── 2.CNN/                          # NumPy + PyTorch CNN
+│   ├── training-100.py, training_torch.py, app.py, test_model.py, setup_data.py
+│   └── assets/
+│
+├── 3.RNN/                          # PyTorch GRU-based RNN
+│   ├── training-doodle.py, app.py, eval_and_plots.py, setup_data.py
+│   └── assets/
+│
+└── 4.Transformers/                 # Full Transformer suite
+    ├── app.py                      # 3-tab Gradio demo
+    ├── optimize_models.py
+    ├── encoder_transformer/        # Encoder-only (emotion + MLM)
+    ├── decoder_transformer/        # Decoder-only (Shakespeare)
+    └── machine_translation/        # Full Seq2Seq (EN→FR)
+```
+
+---
+
+## Getting Started
+
+```bash
+# Clone the repo
+git clone https://github.com/Elliot-Sones/Neural_Networks_Fundamentals.git
+cd Neural_Networks_Fundamentals
+
+# Create a virtual environment
+python -m venv .venv && source .venv/bin/activate
+
+# Install all dependencies
+pip install -r requirements.txt
+```
+
+Then navigate into any section folder (`1.MLP/`, `2.CNN/`, `3.RNN/`, `4.Transformers/`) and follow the quickstart in its README.
+
+### Weights & Checkpoints
+
+Model weights (`.pt`, `.npz`) are not tracked in this repo. To run demos locally, either:
+- **Train from scratch** using the training scripts in each section, or
+- **Download checkpoints** from the corresponding [Hugging Face Spaces](https://huggingface.co/Eli181927)
+
+---
+
 ## Data
 
-- MNIST (for MLP)
-  - Source: https://storage.googleapis.com/cvdf-datasets/mnist and http://yann.lecun.com/exdb/mnist
-  - Generated by: 1.MLP/setup_data.py
-  - Outputs: 1.MLP/archive/mnist_train.csv, 1.MLP/archive/mnist_test.csv
-  - Format: CSV with header. Column 0 is label, columns p0..p783 are 28×28 pixel intensities.
+| Section | Dataset | Source | Generated by |
+|---|---|---|---|
+| 1.MLP | MNIST (28×28, 0-9) | [CVDF mirror](https://storage.googleapis.com/cvdf-datasets/mnist) | `1.MLP/setup_data.py` |
+| 2.CNN | MNIST-100 (28×56, 0-99) | Paired from MNIST | `2.CNN/setup_data.py` |
+| 3.RNN | Quick, Draw! (10 animals) | [Google Quick Draw](https://storage.googleapis.com/quickdraw_dataset/full/simplified/) | `3.RNN/setup_data.py` |
+| 4.Transformers | Tiny Shakespeare, GoEmotions, WMT14 EN-FR | Various | See [4.Transformers/README.md](4.Transformers/README.md) |
 
-- MNIST‑100 (for CNN)
-  - Built from MNIST by concatenating two 28×28 digits horizontally into 28×56 images (labels 00–99).
-  - Generated by: 2.CNN/setup_data.py
-  - Outputs: 2.CNN/archive/mnist_train.csv, 2.CNN/archive/mnist_test.csv
-  - Format: CSV with header. Column 0 is label (0–99), columns p0..p1567 are 28×56 pixel intensities.
-
-- Quick, Draw! (for RNN)
-  - Source: Simplified per‑class NDJSON at https://storage.googleapis.com/quickdraw_dataset/full/simplified/ (CC BY 4.0)
-  - Classes: butterfly, cow, elephant, giraffe, monkey, octopus, scorpion, shark, snake, spider
-  - Generated by: 3.RNN/setup_data.py
-  - Outputs: 3.RNN/archive/animal_doodles_10_train.csv, 3.RNN/archive/animal_doodles_10_test.csv (and animal_doodles.csv combined)
-  - Format: CSV with fields including word (class) and drawing (JSON-encoded stroke sequence). Stratified 85/15 split; recognized-only samples.
+All training data is downloaded on demand by the `setup_data.py` scripts and is excluded from version control via `.gitignore`.

@@ -23,7 +23,7 @@ env/
 
 # OS files
 .DS_Store
-Thumbs.db
+Thumbbs.db
 
 # Model files (optional - if you don't want to commit trained models)
 *.npz
@@ -42,3 +42,10 @@ Thumbs.db
 MNIST/iteration1/.cache/
 MNIST/iteration1/.local_share/
 MNIST/iteration1/.matplotlib_cache/
+
+# Transformer training artifacts
+4.Transformers/encoder_transformer/sentiment/data/
+4.Transformers/decoder_transformer/archive/
+4.Transformers/machine_translation/archive/
+4.Transformers/encoder_transformer/mlm/models/
+4.Transformers/encoder_transformer/mlm/data/

@@ -1,99 +1,122 @@
-# Doodle classification with RNN
-**Goal:** Use a Recurrent Neural Network to accurately classify doodles.
-**Input data:** Quick Draw doodles.
+# 3. Recurrent Neural Network — Doodle Classifier
 
-#### [Try out the demo for yourself](https://huggingface.co/spaces/Eli181927/Classification-doodle-RNN)
+<p align="center">
+  <img src="https://img.shields.io/badge/PyTorch-2.0+-ee4c2c?logo=pytorch&logoColor=white" alt="PyTorch">
+  <img src="https://img.shields.io/badge/Quick%20Draw!-10%20animals-blue" alt="Quick Draw">
+</p>
 
-## Weights
-Model weights and cached arrays are not tracked in this GitHub repo. To run the demo locally, either:
-- Train your own checkpoint with `training-doodle.py` (writes to `3.RNN/archive/`), or
-- Download the checkpoint from the Hugging Face Space and place it under `3.RNN/archive/` (e.g. `rnn_animals_best.pt`).
+[Try the live demo](https://huggingface.co/spaces/Eli181927/Classification-doodle-RNN) · [Training code](training-doodle.py)
+
+---
+
+## Goal
+
+Use a Recurrent Neural Network to classify hand-drawn doodles into 10 animal classes.
+
+| | |
+|---|---|
+| **Dataset** | Google Quick, Draw! stroke sequences (dx, dy, pen-lift) — 10 animal classes |
+| **Architecture** | 2-layer bidirectional GRU (hidden 192), AdamW, label smoothing, dropout, gradient clipping |
+| **Result** | **94.36% top-1 accuracy**, 99.10% top-3 accuracy (188,779 test samples) |
+
+### Weights
+
+Model weights are not tracked in this repo. To run the demo locally:
+- **Train** your own checkpoint with `training-doodle.py` (saves to `archive/`), or
+- **Download** from the [Hugging Face Space](https://huggingface.co/spaces/Eli181927/Classification-doodle-RNN) and place under `archive/`
+
+---
 
 ## Recurrent Neural Networks
-[Simple to follow explanation of RNN](https://www.youtube.com/watch?v=AsNTP8Kwu80) 
 
+[Simple explanation of RNNs](https://www.youtube.com/watch?v=AsNTP8Kwu80)
 
 <img src="assets/RNN.png" alt="RNN" width="420"/>
 
+An **RNN** is a neural network trained on sequential data (text, time series, strokes) that maintains a **hidden state** — a memory of what the network has seen so far.
 
+<img src="assets/hiddenstate.png" alt="Hidden state" width="420"/>
 
-A **Recurrent Neural Network** is a neural network trained on sequential data (like text, time series, or speech) to make predictions that depend on previous inputs.
-
-
-They are able to do this by maintaining a **hidden state** which acts like a memory about what the network has seen so far.
-
-
-<img src="assets/hiddenstate.png" alt="hidden state" width="420"/>
-
-At each time step, the RNN takes 2 things: 
-- The current input $x_t$
-- The previous hidden state $h_{t-1}$
-
-it then updates the hidden state: 
+At each time step, the RNN takes the current input $x_t$ and previous hidden state $h_{t-1}$, and updates:
 
 $$
 h_t = \tanh(W_x x_t + W_h h_{t-1} + b)
 $$
 
+However, repeated multiplications by small weights cause gradients to shrink exponentially (**vanishing gradient problem**), making the network forget long-term dependencies.
 
-*Reminder: W are weights, b is a bias terms and tahn is the activation function*
+### LSTM & GRU
 
-However, during training, repeated multiplications by small weights causes gradients to shrink exponentially (called the **vanishing gradient problem**), which makes the network forget long‑term dependencies.
+More advanced architectures use gates to control information flow:
 
+- **LSTM** — 3 gates: forget (discard), input (new info), output (send to next layer)
+- **GRU** — 2 gates: update (forget+input combined), reset (past info to mix in)
 
-More advanced architectures such as **Long Short-Term Memory (LSTM)** and **Gated Recurrent Unit (GRU)**, use gates to control the flow of information, deciding what to keep, forget, or add at each step.
+<img src="assets/compare.png" alt="LSTM vs GRU comparison" width="420"/>
 
-LSTM -> 3 gates: forget (discard info), input (new info) and output (send next layer)
+These preserve important information over long sequences with more stable gradient flow.
 
-GRU -> update gate (forget+input) and reset gate (past info to mix in)
+[Stanford RNN cheat-sheet](https://stanford.edu/~shervine/teaching/cs-230/cheatsheet-recurrent-neural-networks)
 
+---
 
+## Process
 
-<img src="assets/compare.png" alt="compare" width="420"/>
+### Training Setup
 
+- **Data**: 10 animal classes from Quick, Draw!
+- **Encoding**: [dx, dy, pen_lift] — captures motion and stroke boundaries
+- **Length rules**: drop sequences <6 steps, cap at 250
+- **Collation**: pad with lengths, pack sequences so GRU ignores padding
+- **Model**: 2-layer bidirectional GRU (hidden 192)
+- **Optimization**: AdamW, label smoothing, dropout, gradient clipping
+- **Scheduling**: ReduceLROnPlateau + early stopping
+- **Hardware**: Apple MPS acceleration; saves best/last checkpoints
 
-This preserves important information over long sequences by creating a more stable gradient flow. 
+### Results
 
+| Metric | Value |
+|---|---|
+| Test samples | 188,779 |
+| Top-1 accuracy | **94.36%** |
+| Top-3 accuracy | **99.10%** |
 
-There are several RNN types depending on the number of inputs and outputs: one-to-one, one-to-many, many-to-one, and many-to-many.
+<table>
+<tr>
+<td><img src="assets/plots/rnn_confusion_matrix.png" alt="Confusion matrix" width="300"/></td>
+<td><img src="assets/plots/rnn_per_class_accuracy.png" alt="Per-class accuracy" width="300"/></td>
+</tr>
+<tr>
+<td><img src="assets/plots/rnn_reliability.png" alt="Reliability diagram" width="300"/></td>
+<td><img src="assets/plots/rnn_confidence_hist.png" alt="Confidence histogram" width="300"/></td>
+</tr>
+</table>
 
-[Simple cheat-sheet if you need a refresher](https://stanford.edu/~shervine/teaching/cs-230/cheatsheet-recurrent-neural-networks)
+---
 
+## Quickstart
 
+```bash
+cd 3.RNN
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
 
+python setup_data.py            # download Quick, Draw! data → archive/
+python training-doodle.py       # train → archive/rnn_animals_best.pt
+python eval_and_plots.py        # evaluate + generate plots
+python app.py                   # launch local demo
+```
 
+---
 
-## My process
+## Files
 
-## Iteration 1: training only on animals
-- Data: only 10 animals
-- Encoding: [dx, dy, pen_lift]; captures motion and stroke boundaries.
-- Length rules: drop <6 steps, cap 250; stable, faster training.
-- Collation: pad with lengths; pack sequences so GRU ignores padding.
-- Model: 2-layer bidirectional GRU (hidden 192); accuracy-speed balance.
-- Optimization: AdamW, label smoothing, dropout, grad clipping; robustness.
-- Scheduling: ReduceLROnPlateau + early stopping; efficient convergence.
-- System: Apple MPS acceleration; save best/last checkpoints for deployment.
-
-## Results & Plots
-
-Test samples: 188 779
-Top-1 accuracy: 94.36%
-Top-3 accuracy: 99.10%
-
-
-
-Epoch 15 | train_loss=0.3095 train_acc1=1.000 val_loss=0.3140 val_acc1=0.909 val_acc3=0.983 | 114.9s
-
-
-<img src="assets/plots/rnn_confusion_matrix.png" alt="Confusion matrix" width="300"/>
-
-<img src="assets/plots/rnn_per_class_accuracy.png" alt="Per-class accuracy" width="300"/>
-
-<img src="assets/plots/rnn_reliability.png" alt="Reliability diagram" width="300"/>
-
-<img src="assets/plots/rnn_confidence_hist.png" alt="Confidence histogram" width="300"/>
-
-
-
-
+```
+3.RNN/
+├── training-doodle.py          # Full RNN training with GRU
+├── app.py                      # Gradio demo app
+├── eval_and_plots.py           # Evaluation and plot generation
+├── setup_data.py               # Download & prepare Quick, Draw! data
+├── requirements.txt
+└── assets/                     # Architecture diagrams and training plots
+```
